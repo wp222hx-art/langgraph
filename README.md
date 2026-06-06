@@ -110,3 +110,36 @@ pm2 logs claimgpt --nostream     # 查看日志
 - **技术栈**:Python 3.13 + FastAPI + LangGraph 1.2.4 + TailwindCSS + Chart.js
 - **验证**:后端 18/18 模块 + 2集团 + 6角色 + 7国合规全绿;前端桌面+移动端零 JS 错误
 - **最后更新**:2026-06-06(企业级集团控制台升级)
+
+## 🆕 Paydaes HR-Payroll 套件(Pro 方案 · 全量铺开)
+
+基于真实 Paydaes 生产系统(uat-fe.pydco.com)52 张截图,提炼「7 块积木」模板引擎,数据驱动复刻 **6 大业务域 / 20 个功能页**:
+
+### 设计语言:Paydaes 青色(#20c997 / #2BD9C2)
+全栈换肤完成(前端 CSS/HTML/JS + 后端数据均已切青)。
+
+### 7 块积木模板(layout 类型)
+| 积木 | layout | 说明 |
+|------|--------|------|
+| ① 列表页 | `p_list` | 搜索筛选 + Download/+Add + 绿点状态 + 分页 |
+| ② 详情页 | `p_detail` | 只读主键 + 表单网格 + Back/Save |
+| ③ Tab 详情 | `p_tabset` | 内部横向子 Tab + 表单 |
+| ④ Inline 行编辑 | `p_inline` | 行尾 ⊕/垃圾桶 + 头字段 + 分页 |
+| ⑤ 穿梭框 | `p_shuttle` | 双栏候选/已选 + 箭头 |
+| ⑥ Formula 公式 | `p_formula` | 代码编辑器 + 变量芯片 + AI 自然语言生成 |
+| ⑦ 地图定位 | `p_map` | 图钉 + 半径圈 + GPS |
+
+### 6 大域功能页(API: GET /api/module/{id})
+- **税务合规** tax: tax_rate / tax_param / tax_tp1 / tax_receipt / ea_setting / ec_setting
+- **假期管理** leave: leave_entitlement(Formula)/ leave_type / leave_group
+- **考勤管理** ta: shift / schedule_group / holiday / attendance_loc(地图)/ overtime
+- **财务做账** accounting: coa / element_group / gl_account
+- **主数据** master: bank / payroll_var
+
+### 🤖 AI 注入预埋点(下一阶段接真 LLM)
+- Leave Entitlement → 「自然语言生成公式」按钮
+- Tax Rate → 「AI 自动算税」
+- Schedule Group → 「AI 智能排班」
+- Overtime → 「AI 异常检测」
+- EA Setting → 「AI 自动归集」
+- COA → 「AI 科目映射」

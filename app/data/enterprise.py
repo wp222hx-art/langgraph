@@ -41,7 +41,7 @@ ROLES = [
      "menus": ["dashboard", "my", "claim_data", "global"]},
     {"id": "hr_admin", "name": "HR 管理员", "name_en": "HR Admin", "icon": "fa-user-gear", "color": "#8b5cf6",
      "desc": "规则配置、权益批量生成、代员工提交",
-     "menus": ["dashboard", "settings", "my", "claim_data", "claim_flow", "report", "hr", "tax", "global"]},
+     "menus": ["dashboard", "settings", "my", "claim_data", "claim_flow", "report", "hr", "tax", "leave", "ta", "accounting", "master", "global"]},
     {"id": "payroll", "name": "薪资专员", "name_en": "Payroll Officer", "icon": "fa-money-check-dollar", "color": "#f59e0b",
      "desc": "接口流程、过账、审核接口数据",
      "menus": ["dashboard", "claim_flow", "audit", "report", "global"]},
@@ -50,7 +50,7 @@ ROLES = [
      "menus": ["dashboard", "audit", "report", "global"]},
     {"id": "sys_admin", "name": "系统管理员", "name_en": "System Admin", "icon": "fa-shield-halved", "color": "#64748b",
      "desc": "全模块权限、角色及租户配置",
-     "menus": ["dashboard", "settings", "my", "claim_data", "claim_flow", "audit", "report", "hr", "tax", "global"]},
+     "menus": ["dashboard", "settings", "my", "claim_data", "claim_flow", "audit", "report", "hr", "tax", "leave", "ta", "accounting", "master", "global"]},
 ]
 
 # ═══════════════════════════════════════════════

@@ -139,14 +139,276 @@ def _tax_modules(cur: str) -> dict:
     }
 
 
+# ═══════════════════════════════════════════════════════════
+#  🏖️ Leave 假期域
+# ═══════════════════════════════════════════════════════════
+def _leave_modules(cur: str) -> dict:
+    return {
+        # Leave Entitlement —— Formula 公式编辑器(AI 自然语言生成预埋点)
+        "leave_entitlement": {
+            "title": "Leave Entitlement · 假期权益", "domain": "假期管理",
+            "desc": "定义假期资格规则,支持 Eligibility / Pro Rata / Carry Forward / Advance 多维配置",
+            "layout": "p_formula",
+            "actions": ["Save Changes", "新增权益"],
+            "header_fields": [
+                F("Country Code", "ro", "MY", True),
+                F("Entitlement Code", "t", "AL-STD-2026", True),
+                F("Effective Date", "date", "2026-01-01", True),
+                F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
+                F("Entitlement Name", "t", "标准年假权益", True),
+                F("Same for all employee", "radio", "", True, opts=["Yes", "No"]),
+                F("Default Entitlement Day(s)", "num", "14", True, unit="天"),
+            ],
+            "formula": ("IF(HR.GENDER='M' AND HR.MARITAL='married',\n"
+                        "   ENTITLEMENT.DAYS + 3,\n"
+                        "   IF(SERVICE.YEARS >= 5,\n"
+                        "      ENTITLEMENT.DAYS + 2,\n"
+                        "      ENTITLEMENT.DAYS))"),
+            "formula_vars": ["HR.GENDER", "HR.MARITAL", "SERVICE.YEARS", "HR.GRADE",
+                             "ENTITLEMENT.DAYS", "IF()", "AND", "OR", "ROUND()"],
+        },
+        # Leave Type —— 详情表单 + 内部 Tab
+        "leave_type": {
+            "title": "Leave Type · 假期类型", "domain": "假期管理",
+            "desc": "定义假期类型的基础属性、扣减规则、性别/婚姻限制",
+            "layout": "p_tabset",
+            "actions": ["Save Changes", "+ Add"],
+            "sub_tabs": ["基础设置", "扣减规则", "限制条件", "审批流"],
+            "fields": [
+                F("Leave Code", "t", "AL", True),
+                F("Leave Name", "t", "年假 Annual Leave", True),
+                F("Effective Date", "date", "2026-01-01", True),
+                F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
+                F("Paid Leave", "radio", "", True, opts=["Yes", "No"]),
+                F("Allow Half Day", "radio", "", True, opts=["Yes", "No"]),
+                F("Gender Restriction", "dd", "无限制", False, opts=["无限制", "仅男性", "仅女性"]),
+                F("Min. Service (months)", "num", "3", False, unit="月"),
+            ],
+        },
+        # Leave Group —— 列表页
+        "leave_group": {
+            "title": "Leave Group · 假期组", "domain": "假期管理",
+            "desc": "聚合假期类型、原因、是否必填、考勤关联与校验规则",
+            "layout": "p_list",
+            "actions": ["Download", "+ Add"],
+            "filters": ["Leave Type", "Status"],
+            "columns": ["Group Code", "Leave Type", "Leave Reason", "Required?", "Time&Attendance", "Status"],
+            "rows": [
+                ["LG-STD", "年假/病假/事假", "需填原因", "Yes", "已关联", "✅ 生效"],
+                ["LG-MED", "病假/住院假", "需附件", "Yes", "已关联", "✅ 生效"],
+                ["LG-SPC", "婚假/产假/陪产假", "需附件", "Yes", "—", "✅ 生效"],
+            ],
+        },
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+#  ⏰ Time & Attendance 考勤域
+# ═══════════════════════════════════════════════════════════
+def _ta_modules(cur: str) -> dict:
+    return {
+        # Shift —— 详情表单(含弹性班次单选 + 宽限期)
+        "shift": {
+            "title": "Shift · 班次", "domain": "考勤管理",
+            "desc": "定义班次时间、班别类型、弹性设置、迟到宽限期",
+            "layout": "p_detail",
+            "actions": ["Save Changes", "+ Add"],
+            "fields": [
+                F("Company Code", "ro", "COM01", True),
+                F("Shift Code", "t", "AFTERNOON", True),
+                F("Effective Date", "date", "2024-05-03", True),
+                F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
+                F("Day Type", "dd", "WD - Work Day", True, opts=["WD - Work Day", "RD - Rest Day", "PH - Public Holiday"]),
+                F("Flexible Shift", "radio", "", True, opts=["Yes", "Yes (With Limit)", "No"]),
+                F("Start Time", "time", "12:00", True),
+                F("End Time", "time", "22:00", True),
+                F("Grace for Late", "num", "5", True, unit="分钟"),
+                F("Shift Description", "t", "Afternoon Shift 12pm - 10pm", False),
+            ],
+        },
+        # Schedule Group —— Inline Table(Admin/Member Option)
+        "schedule_group": {
+            "title": "Schedule Group · 排班组", "domain": "考勤管理",
+            "desc": "管理排班组成员(Admin Option / Member Option),关联部门/员工/班次",
+            "layout": "p_inline",
+            "actions": ["+ Add Row", "AI 智能排班"],
+            "header_fields": [
+                F("Company Code", "ro", "COM01", True),
+                F("Schedule Group Code", "t", "FUTURE1", True),
+                F("Effective Date", "date", "2027-01-12", True),
+                F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
+            ],
+            "columns": ["No", "Employee ID", "Name", "Department", "Shift Code"],
+            "rows": [
+                ["1", "EMP99999999", "Ruby Rose", "运营部", "AFTERNOON"],
+                ["2", "EMP10000231", "John Tan", "财务部", "MORNING"],
+                ["3", "EMP10000455", "Lisa Wong", "技术部", "FLEXIBLE"],
+            ],
+        },
+        # Holiday Schedule —— Inline Table(法定假日)
+        "holiday": {
+            "title": "Holiday Schedule · 假日表", "domain": "考勤管理",
+            "desc": "维护法定公共假日(Gazetted PH),支持按州属差异化",
+            "layout": "p_inline",
+            "actions": ["+ Add Row"],
+            "header_fields": [
+                F("Company Code", "ro", "COM01", True),
+                F("Year", "dd", "2026", True, opts=["2026", "2025"]),
+                F("State", "dd", "Selangor", False, opts=["Selangor", "Kuala Lumpur", "Penang", "Johor"]),
+                F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
+            ],
+            "columns": ["No", "Date", "Holiday Name", "Type", "Gazetted PH"],
+            "rows": [
+                ["1", "2026-01-01", "New Year's Day", "National", "Yes"],
+                ["2", "2026-02-17", "Chinese New Year", "National", "Yes"],
+                ["3", "2026-05-01", "Labour Day", "National", "Yes"],
+                ["4", "2026-08-31", "Merdeka Day", "National", "Yes"],
+            ],
+        },
+        # Attendance Location —— 地图定位
+        "attendance_loc": {
+            "title": "Attendance Location · 打卡地点", "domain": "考勤管理",
+            "desc": "GPS 打卡地点配置,设置经纬度与有效打卡半径",
+            "layout": "p_map", "radius": "500",
+            "actions": ["Save Changes", "+ Add"],
+            "fields": [
+                F("Effective Date", "date", "2026-01-01", True),
+                F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
+                F("Location Name", "t", "Paydaes HQ Tower", True),
+                F("Location Address", "area", "Level 12, Menara KL, Jalan Sultan Ismail", False, hint="请输入地址…"),
+                F("Postcode", "t", "50250", False),
+                F("Country", "dd", "Malaysia", False, opts=["Malaysia", "Singapore", "Thailand"]),
+                F("State", "dd", "Kuala Lumpur", False, opts=["Kuala Lumpur", "Selangor"]),
+                F("Maximum Radius", "num", "500", False, unit="米"),
+            ],
+        },
+        # Overtime Setting —— Tabset(General/Rules/Overtime Type)
+        "overtime": {
+            "title": "Overtime Setting · 加班设置", "domain": "考勤管理",
+            "desc": "加班规则、上限、加班类型、替代假转换配置",
+            "layout": "p_tabset",
+            "actions": ["Save Changes", "AI 异常检测"],
+            "sub_tabs": ["General", "Rules", "Overtime Type"],
+            "fields": [
+                F("Company Code", "ro", "COM05", True),
+                F("Effective Date", "date", "2025-11-11", True),
+                F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
+                F("Monthly Overtime Maximum Hours", "num", "104", True, unit="小时"),
+                F("Min. OT Block", "num", "30", False, unit="分钟"),
+                F("Replacement Leave Conversion", "radio", "", False, opts=["启用", "不启用"]),
+            ],
+        },
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+#  📒 Accounting 财务域
+# ═══════════════════════════════════════════════════════════
+def _acc_modules(cur: str) -> dict:
+    return {
+        # Chart of Accounts —— Tabset(Chartfields/COA Mapping/Remapping)
+        "coa": {
+            "title": "Chart of Accounts · 会计科目表", "domain": "财务做账",
+            "desc": "配置 Chartfield 1-6 维度、科目映射与重映射",
+            "layout": "p_tabset",
+            "actions": ["Save Changes", "AI 科目映射"],
+            "sub_tabs": ["Chartfields Details", "COA Mapping", "COA Remapping"],
+            "fields": [
+                F("Company Code", "ro", "COM01", True),
+                F("Effective Date", "date", "2026-01-01", True),
+                F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
+                F("Chartfield 1 (Entity)", "dd", "1000 - 总公司", True, opts=["1000 - 总公司", "2000 - 分公司"]),
+                F("Chartfield 2 (Dept)", "dd", "100 - 运营部", False, opts=["100 - 运营部", "200 - 财务部"]),
+                F("Chartfield 3 (Project)", "dd", "PRJ-001", False, opts=["PRJ-001", "PRJ-002"]),
+                F("Chartfield 4 (Cost Center)", "dd", "CC-KL", False, opts=["CC-KL", "CC-SG"]),
+                F("Chartfield 5 (Account)", "dd", "6100 - 差旅费", False, opts=["6100 - 差旅费", "6200 - 餐饮费"]),
+                F("Chartfield 6 (Future)", "dd", "—", False, opts=["—"]),
+            ],
+        },
+        # Element Grouping —— 穿梭框
+        "element_group": {
+            "title": "Element Grouping · 要素分组", "domain": "财务做账",
+            "desc": "将薪资/报销要素分组,映射到 GL 科目",
+            "layout": "p_shuttle",
+            "actions": ["Save Changes"],
+            "header_fields": [
+                F("Group Code", "t", "GRP-CLAIM", True),
+                F("Effective Date", "date", "2026-01-01", True),
+            ],
+            "shuttle_left_title": "可选要素",
+            "shuttle_right_title": "已加入分组",
+            "left": ["餐饮费", "交通费", "住宿费", "机票", "办公用品", "培训费", "通讯费"],
+            "right": ["餐饮费", "交通费", "住宿费"],
+        },
+        # GL Account Number —— 列表页
+        "gl_account": {
+            "title": "GL Account Number · 总账科目", "domain": "财务做账",
+            "desc": "维护总账科目编号与名称,关联报销/薪资要素",
+            "layout": "p_list",
+            "actions": ["Download", "+ Add"],
+            "filters": ["Account Type", "Status"],
+            "columns": ["GL Account No", "Account Name", "Type", "关联要素", "Status"],
+            "rows": [
+                ["6100", "差旅费 Travel Expense", "费用", "交通/住宿/机票", "✅ 生效"],
+                ["6200", "餐饮费 Meal Expense", "费用", "餐饮", "✅ 生效"],
+                ["6300", "办公费 Office Expense", "费用", "办公用品", "✅ 生效"],
+                ["2100", "应付职工薪酬", "负债", "薪资接口", "✅ 生效"],
+            ],
+        },
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+#  🏦 Master Data 主数据域
+# ═══════════════════════════════════════════════════════════
+def _master_modules(cur: str) -> dict:
+    return {
+        # Bank —— Tabset(Bank Table/Branch/BIC)
+        "bank": {
+            "title": "Bank · 银行主数据", "domain": "主数据",
+            "desc": "维护银行表、分行表、银行识别码(BIC/SWIFT)",
+            "layout": "p_tabset",
+            "actions": ["Save Changes", "+ Add"],
+            "sub_tabs": ["Bank Table", "Branch Table", "Bank Identifier Code"],
+            "fields": [
+                F("Bank Code", "t", "MBB", True),
+                F("Bank Name", "t", "Maybank Berhad", True),
+                F("Country", "dd", "Malaysia", True, opts=["Malaysia", "Singapore", "Thailand"]),
+                F("BIC / SWIFT", "t", "MBBEMYKL", True),
+                F("Effective Date", "date", "2026-01-01", True),
+                F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
+            ],
+        },
+        # Payroll Variable —— 列表页
+        "payroll_var": {
+            "title": "Payroll Variable · 薪资变量", "domain": "主数据",
+            "desc": "维护薪资计算用的变量参数(津贴标准、扣款比例等)",
+            "layout": "p_list",
+            "actions": ["Download", "+ Add"],
+            "filters": ["Variable Type", "Status"],
+            "columns": ["Variable Code", "Name", "Value", "Unit", "Status"],
+            "rows": [
+                ["VAR-MEAL", "餐补标准", "200", cur, "✅ 生效"],
+                ["VAR-TRANS", "交通津贴", "500", cur, "✅ 生效"],
+                ["VAR-EPF-EE", "EPF 员工比例", "11", "%", "✅ 生效"],
+                ["VAR-EPF-ER", "EPF 雇主比例", "13", "%", "✅ 生效"],
+            ],
+        },
+    }
+
+
 def get_paydaes_module(module_id: str, cur: str = "MYR") -> dict | None:
     """返回 Paydaes 6 大域模块视图;不存在返回 None(交回原 18 模块逻辑)"""
     registry = {}
     registry.update(_tax_modules(cur))
+    registry.update(_leave_modules(cur))
+    registry.update(_ta_modules(cur))
+    registry.update(_acc_modules(cur))
+    registry.update(_master_modules(cur))
     return registry.get(module_id)
 
 
-# 供导航树使用:Paydaes 6 大域菜单(分阶段开放,先开 Tax)
+# 供导航树使用:Paydaes 6 大域菜单(全量铺开)
 PAYDAES_NAV = [
     {"id": "tax", "name": "税务合规", "icon": "fa-percent", "type": "group", "badge": "NEW", "children": [
         {"id": "tax_rate", "name": "Tax Rate Table", "module": "税率表"},
@@ -155,5 +417,26 @@ PAYDAES_NAV = [
         {"id": "tax_receipt", "name": "Tax Receipt", "module": "税务回单"},
         {"id": "ea_setting", "name": "EA Setting", "module": "EA表单"},
         {"id": "ec_setting", "name": "EC Setting", "module": "EC表单"},
+    ]},
+    {"id": "leave", "name": "假期管理", "icon": "fa-umbrella-beach", "type": "group", "badge": "NEW", "children": [
+        {"id": "leave_entitlement", "name": "Leave Entitlement", "module": "假期权益"},
+        {"id": "leave_type", "name": "Leave Type", "module": "假期类型"},
+        {"id": "leave_group", "name": "Leave Group", "module": "假期组"},
+    ]},
+    {"id": "ta", "name": "考勤管理", "icon": "fa-business-time", "type": "group", "badge": "NEW", "children": [
+        {"id": "shift", "name": "Shift", "module": "班次"},
+        {"id": "schedule_group", "name": "Schedule Group", "module": "排班组"},
+        {"id": "holiday", "name": "Holiday Schedule", "module": "假日表"},
+        {"id": "attendance_loc", "name": "Attendance Location", "module": "打卡地点"},
+        {"id": "overtime", "name": "Overtime Setting", "module": "加班设置"},
+    ]},
+    {"id": "accounting", "name": "财务做账", "icon": "fa-book", "type": "group", "badge": "NEW", "children": [
+        {"id": "coa", "name": "Chart of Accounts", "module": "会计科目表"},
+        {"id": "element_group", "name": "Element Grouping", "module": "要素分组"},
+        {"id": "gl_account", "name": "GL Account Number", "module": "总账科目"},
+    ]},
+    {"id": "master", "name": "主数据", "icon": "fa-database", "type": "group", "badge": "NEW", "children": [
+        {"id": "bank", "name": "Bank", "module": "银行"},
+        {"id": "payroll_var", "name": "Payroll Variable", "module": "薪资变量"},
     ]},
 ]
