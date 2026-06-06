@@ -2,76 +2,101 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Paydaes ClaimGPT · AI Native 报销智能平台</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Paydaes ClaimGPT · 集团级 AI 报销智能平台</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏢</text></svg>">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <link href="/static/app.css" rel="stylesheet">
 </head>
-<body class="bg-slate-50 text-slate-800">
-  <div class="flex h-screen overflow-hidden">
+<body class="bg-slate-100 text-slate-800 overflow-hidden">
 
-    <!-- ═══ 侧边栏:5 主 Agent 切换 ═══ -->
-    <aside class="w-72 bg-white border-r border-slate-200 flex flex-col shrink-0">
-      <div class="p-5 border-b border-slate-100">
-        <div class="flex items-center gap-2">
-          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">C</div>
-          <div>
-            <h1 class="font-bold text-slate-900 leading-tight">ClaimGPT</h1>
-            <p class="text-[11px] text-slate-400">AI Native 报销智能平台 V3.0</p>
-          </div>
-        </div>
-      </div>
+<!-- ═══════════ 顶部全局栏 ═══════════ -->
+<header id="topbar" class="fixed top-0 inset-x-0 h-14 bg-white border-b border-slate-200 z-40 flex items-center px-3 md:px-5 gap-2 md:gap-4">
+  <!-- 移动端菜单按钮 -->
+  <button id="menu-toggle" class="md:hidden w-9 h-9 rounded-lg hover:bg-slate-100 text-slate-600"><i class="fas fa-bars"></i></button>
 
-      <div class="px-4 py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">智能体团队 · 5</div>
-      <nav id="agent-list" class="flex-1 overflow-y-auto px-3 space-y-1.5"></nav>
-
-      <div class="p-3 border-t border-slate-100">
-        <div class="text-[11px] text-slate-400 mb-1.5 px-1">覆盖 <b id="module-count" class="text-slate-600">18</b> 个业务模块</div>
-        <div class="bg-slate-50 rounded-lg p-2.5 text-[11px] text-slate-500 leading-relaxed">
-          <i class="fas fa-bolt text-amber-400"></i> 底层:LangGraph 编排引擎<br>
-          <i class="fas fa-layer-group text-indigo-400"></i> 架构:5主Agent + 8子Agent
-        </div>
-      </div>
-    </aside>
-
-    <!-- ═══ 主区:对话 ═══ -->
-    <main class="flex-1 flex flex-col min-w-0">
-      <!-- 顶部当前 Agent 信息条 -->
-      <header id="agent-header" class="h-16 bg-white border-b border-slate-200 flex items-center px-6 gap-3 shrink-0">
-        <span id="header-emoji" class="text-2xl">🙋</span>
-        <div class="flex-1 min-w-0">
-          <div id="header-name" class="font-semibold text-slate-900">报销伙伴</div>
-          <div id="header-desc" class="text-xs text-slate-400 truncate">拍照报销 · 对话提交 · 余额查询</div>
-        </div>
-        <div id="header-modules" class="hidden md:flex gap-1.5 flex-wrap justify-end max-w-md"></div>
-      </header>
-
-      <!-- 消息流 -->
-      <div id="messages" class="flex-1 overflow-y-auto px-6 py-6 space-y-5"></div>
-
-      <!-- 快捷示例 -->
-      <div id="samples" class="px-6 pb-2 flex gap-2 flex-wrap"></div>
-
-      <!-- 输入区 -->
-      <div class="p-4 border-t border-slate-200 bg-white">
-        <div class="flex items-end gap-2 max-w-4xl mx-auto">
-          <button id="photo-btn" class="h-11 w-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 shrink-0" title="模拟拍照上传发票">
-            <i class="fas fa-camera"></i>
-          </button>
-          <textarea id="input" rows="1" placeholder="用大白话告诉我你想做什么……(例如:我打车花了88块要报销)"
-            class="flex-1 resize-none rounded-xl border border-slate-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 max-h-32"></textarea>
-          <button id="send-btn" class="h-11 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium shrink-0">
-            <i class="fas fa-paper-plane"></i>
-          </button>
-        </div>
-        <p class="text-center text-[11px] text-slate-300 mt-2">ClaimGPT 是一群替你思考的智能体 · 高风险决策始终由人最终审批</p>
-      </div>
-    </main>
+  <!-- 集团 Logo + 名称 -->
+  <div class="flex items-center gap-2 shrink-0">
+    <div id="group-logo" class="w-8 h-8 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center">P</div>
+    <span id="group-name" class="font-bold text-slate-900 hidden sm:block">Paydaes 集团</span>
   </div>
 
-  <script src="/static/app.js"></script>
+  <!-- 集团/公司切换器 -->
+  <button id="company-switch" class="flex items-center gap-1.5 px-2.5 md:px-3 h-9 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-sm shrink-0">
+    <span id="company-flag">🇸🇬</span>
+    <span id="company-name" class="font-medium hidden sm:block">新加坡公司</span>
+    <i class="fas fa-chevron-down text-[10px] text-slate-400"></i>
+  </button>
+
+  <div class="flex-1"></div>
+
+  <!-- 全球合规快捷 -->
+  <button id="global-btn" class="hidden md:flex items-center gap-1.5 px-3 h-9 rounded-lg hover:bg-slate-100 text-sm text-slate-600">
+    <i class="fas fa-earth-asia text-cyan-500"></i><span>全球合规</span>
+  </button>
+  <!-- 语言 -->
+  <button id="lang-switch" class="flex items-center gap-1 px-2 h-9 rounded-lg hover:bg-slate-100 text-sm shrink-0">
+    <span id="lang-flag">🇨🇳</span><i class="fas fa-chevron-down text-[10px] text-slate-400"></i>
+  </button>
+  <!-- 通知 -->
+  <button class="relative w-9 h-9 rounded-lg hover:bg-slate-100 text-slate-600 shrink-0">
+    <i class="fas fa-bell"></i><span class="absolute top-1.5 right-2 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+  </button>
+  <!-- 角色/用户 -->
+  <button id="role-switch" class="flex items-center gap-2 px-1.5 md:px-2 h-9 rounded-lg hover:bg-slate-100 shrink-0">
+    <span id="role-avatar" class="w-7 h-7 rounded-full bg-slate-700 text-white text-xs flex items-center justify-center"><i class="fas fa-shield-halved"></i></span>
+    <span id="role-name" class="text-sm font-medium hidden md:block">系统管理员</span>
+    <i class="fas fa-chevron-down text-[10px] text-slate-400 hidden md:block"></i>
+  </button>
+  <!-- AI 唤起按钮 -->
+  <button id="ai-toggle" class="flex items-center gap-1.5 px-2.5 md:px-3 h-9 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-medium shrink-0">
+    <i class="fas fa-robot"></i><span class="hidden sm:block">AI 助手</span>
+  </button>
+</header>
+
+<!-- ═══════════ 左侧导航树 ═══════════ -->
+<aside id="sidebar" class="fixed top-14 bottom-0 left-0 w-60 bg-white border-r border-slate-200 z-30 flex flex-col transition-transform md:translate-x-0 -translate-x-full">
+  <nav id="nav-tree" class="flex-1 overflow-y-auto py-3 px-2.5 space-y-0.5"></nav>
+  <div class="p-3 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed">
+    <div><i class="fas fa-bolt text-amber-400"></i> LangGraph 编排引擎</div>
+    <div><i class="fas fa-layer-group text-indigo-400"></i> 5主 + 8子 Agent · 18 模块</div>
+    <div class="mt-1 text-slate-300">Paydaes ClaimGPT · 集团版 V3.0</div>
+  </div>
+</aside>
+<!-- 移动端遮罩 -->
+<div id="sidebar-mask" class="fixed inset-0 top-14 bg-black/30 z-20 hidden md:hidden"></div>
+
+<!-- ═══════════ 主工作区 ═══════════ -->
+<main id="workspace" class="fixed top-14 bottom-0 left-0 right-0 md:left-60 overflow-y-auto">
+  <div id="view" class="p-4 md:p-6 max-w-[1400px] mx-auto"></div>
+</main>
+
+<!-- ═══════════ AI 智能体抽屉 ═══════════ -->
+<div id="ai-mask" class="fixed inset-0 bg-black/40 z-40 hidden"></div>
+<aside id="ai-drawer" class="fixed top-0 bottom-0 right-0 w-full sm:w-[420px] bg-slate-50 z-50 flex flex-col translate-x-full transition-transform shadow-2xl">
+  <div class="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-2 shrink-0">
+    <i class="fas fa-robot text-indigo-600"></i>
+    <span class="font-semibold flex-1">AI 智能体团队</span>
+    <button id="ai-close" class="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500"><i class="fas fa-xmark"></i></button>
+  </div>
+  <!-- 智能体选择条 -->
+  <div id="agent-tabs" class="flex gap-1 px-3 py-2 bg-white border-b border-slate-100 overflow-x-auto shrink-0"></div>
+  <div id="ai-messages" class="flex-1 overflow-y-auto px-4 py-4 space-y-4"></div>
+  <div id="ai-samples" class="px-3 pb-1.5 flex gap-1.5 flex-wrap shrink-0"></div>
+  <div class="p-3 border-t border-slate-200 bg-white shrink-0">
+    <div class="flex items-end gap-2">
+      <textarea id="ai-input" rows="1" placeholder="用大白话告诉我……" class="flex-1 resize-none rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 max-h-28"></textarea>
+      <button id="ai-send" class="h-10 w-10 rounded-xl bg-indigo-600 text-white shrink-0"><i class="fas fa-paper-plane text-sm"></i></button>
+    </div>
+  </div>
+</aside>
+
+<!-- 通用下拉弹层 -->
+<div id="popover" class="fixed z-50 hidden bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 min-w-[200px] max-h-[70vh] overflow-y-auto"></div>
+<div id="popover-mask" class="fixed inset-0 z-40 hidden"></div>
+
+<script src="/static/app.js"></script>
 </body>
 </html>

@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.core.orchestrator import run_turn
+from app.data import enterprise, navigation, mock_db
 
 app = FastAPI(title="Paydaes ClaimGPT", version="3.0")
 
@@ -55,6 +56,42 @@ class ChatReq(BaseModel):
 @app.get("/api/agents")
 def get_agents():
     return {"agents": AGENTS}
+
+
+# ═══════ 企业级 API ═══════
+@app.get("/api/bootstrap")
+def bootstrap():
+    """前端启动时一次性拉取:集团/公司、角色、语言、导航树"""
+    return {
+        "groups": enterprise.GROUPS,
+        "roles": enterprise.ROLES,
+        "languages": enterprise.LANGUAGES,
+        "nav": navigation.NAV_TREE,
+        "agents": AGENTS,
+    }
+
+
+@app.get("/api/dashboard")
+def dashboard(company: str = "sg"):
+    return {
+        "kpi": navigation.dashboard_kpi(company),
+        "todos": navigation.TODOS,
+        "chart": navigation.DASHBOARD_CHART,
+    }
+
+
+@app.get("/api/compliance")
+def compliance(country: str | None = None):
+    if country:
+        return enterprise.COUNTRIES.get(country.upper(), {})
+    return {"countries": enterprise.COUNTRIES}
+
+
+@app.get("/api/module/{module_id}")
+def module_data(module_id: str, company: str = "sg"):
+    """返回某个模块的工作区数据(表格/卡片)"""
+    from app.data.module_views import get_module_view
+    return get_module_view(module_id, company)
 
 
 @app.get("/api/modules")

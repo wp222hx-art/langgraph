@@ -8,3 +8,5 @@ venv/
 .wrangler/
 node_modules/
 *.tar.gz
+shots/
+shot.py
