@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paydaes ClaimGPT · AI Native 报销智能平台</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link href="/static/app.css" rel="stylesheet">
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div class="flex h-screen overflow-hidden">
+
+    <!-- ═══ 侧边栏:5 主 Agent 切换 ═══ -->
+    <aside class="w-72 bg-white border-r border-slate-200 flex flex-col shrink-0">
+      <div class="p-5 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">C</div>
+          <div>
+            <h1 class="font-bold text-slate-900 leading-tight">ClaimGPT</h1>
+            <p class="text-[11px] text-slate-400">AI Native 报销智能平台 V3.0</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-4 py-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">智能体团队 · 5</div>
+      <nav id="agent-list" class="flex-1 overflow-y-auto px-3 space-y-1.5"></nav>
+
+      <div class="p-3 border-t border-slate-100">
+        <div class="text-[11px] text-slate-400 mb-1.5 px-1">覆盖 <b id="module-count" class="text-slate-600">18</b> 个业务模块</div>
+        <div class="bg-slate-50 rounded-lg p-2.5 text-[11px] text-slate-500 leading-relaxed">
+          <i class="fas fa-bolt text-amber-400"></i> 底层:LangGraph 编排引擎<br>
+          <i class="fas fa-layer-group text-indigo-400"></i> 架构:5主Agent + 8子Agent
+        </div>
+      </div>
+    </aside>
+
+    <!-- ═══ 主区:对话 ═══ -->
+    <main class="flex-1 flex flex-col min-w-0">
+      <!-- 顶部当前 Agent 信息条 -->
+      <header id="agent-header" class="h-16 bg-white border-b border-slate-200 flex items-center px-6 gap-3 shrink-0">
+        <span id="header-emoji" class="text-2xl">🙋</span>
+        <div class="flex-1 min-w-0">
+          <div id="header-name" class="font-semibold text-slate-900">报销伙伴</div>
+          <div id="header-desc" class="text-xs text-slate-400 truncate">拍照报销 · 对话提交 · 余额查询</div>
+        </div>
+        <div id="header-modules" class="hidden md:flex gap-1.5 flex-wrap justify-end max-w-md"></div>
+      </header>
+
+      <!-- 消息流 -->
+      <div id="messages" class="flex-1 overflow-y-auto px-6 py-6 space-y-5"></div>
+
+      <!-- 快捷示例 -->
+      <div id="samples" class="px-6 pb-2 flex gap-2 flex-wrap"></div>
+
+      <!-- 输入区 -->
+      <div class="p-4 border-t border-slate-200 bg-white">
+        <div class="flex items-end gap-2 max-w-4xl mx-auto">
+          <button id="photo-btn" class="h-11 w-11 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 shrink-0" title="模拟拍照上传发票">
+            <i class="fas fa-camera"></i>
+          </button>
+          <textarea id="input" rows="1" placeholder="用大白话告诉我你想做什么……(例如:我打车花了88块要报销)"
+            class="flex-1 resize-none rounded-xl border border-slate-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 max-h-32"></textarea>
+          <button id="send-btn" class="h-11 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium shrink-0">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </div>
+        <p class="text-center text-[11px] text-slate-300 mt-2">ClaimGPT 是一群替你思考的智能体 · 高风险决策始终由人最终审批</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
