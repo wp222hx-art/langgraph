@@ -148,13 +148,24 @@ async function renderModule(navId) {
   else if (m.layout === 'self_claim') body = selfClaimView(m);
   else if (m.layout === 'balance') body = balanceView(m);
   else if (m.layout === 'family') body = familyView(m);
+  // ── Paydaes 7 块积木 ──
+  else if (m.layout === 'p_inline') body = pInlineView(m);
+  else if (m.layout === 'p_detail') body = pDetailView(m);
+  else if (m.layout === 'p_list') body = pListView(m);
+  else if (m.layout === 'p_shuttle') body = pShuttleView(m);
+  else if (m.layout === 'p_formula') body = pFormulaView(m);
+  else if (m.layout === 'p_map') body = pMapView(m);
+  else if (m.layout === 'p_tabset') body = pTabsetView(m);
   else body = tableView(m);
 
+  const domainBadge = m.domain ? `<span class="badge b-info ml-2" style="font-size:11px">${m.domain}</span>` : '';
   $('#view').innerHTML = `
     <div class="flex items-start justify-between mb-4 flex-wrap gap-3">
-      <div><h1 class="page-title">${m.title}</h1><p class="text-sm text-slate-400 mt-1">${m.desc || ''}</p></div>
+      <div><h1 class="page-title">${m.title}${domainBadge}</h1><p class="text-sm text-slate-400 mt-1">${m.desc || ''}</p></div>
       <div class="flex gap-2 flex-wrap">${actions}</div>
-    </div>${body}`;
+    </div>
+    ${m.tabs_top ? topTabsBar(m) : ''}
+    ${body}`;
   if (m.layout === 'report') drawReportChart(m);
 }
 
@@ -476,3 +487,180 @@ function renderAICard(card) {
   });
 }
 function aiScroll() { const m = $('#ai-messages'); m.scrollTop = m.scrollHeight; }
+
+// ═══════════════════════════════════════════════════════════
+//  Paydaes 7 块积木渲染器(Pro 方案 · 数据驱动)
+// ═══════════════════════════════════════════════════════════
+
+// 横滚 Tab 群(Tax 家族顶部)
+function topTabsBar(m) {
+  const act = m.tabs_active ?? 0;
+  return `<div class="ptab-bar mb-4">
+    ${m.tabs_top.map((t, i) => `<div class="ptab ${i === act ? 'active' : ''}">${t}</div>`).join('')}
+  </div>`;
+}
+
+// 单个表单字段渲染(支持 ro/dd/date/num/radio/area/map/time/t）
+function pField(f) {
+  const req = f.req ? '<span class="text-rose-500">*</span>' : '';
+  const lbl = `<label class="pf-label">${f.label} ${req}</label>`;
+  let ctrl = '';
+  const unit = f.unit ? `<span class="pf-unit">${f.unit}</span>` : '';
+  if (f.type === 'ro')
+    ctrl = `<input class="pf-input pf-ro" value="${esc(f.value)}" disabled>`;
+  else if (f.type === 'dd')
+    ctrl = `<div class="pf-select">${esc(f.value || (f.opts[0] || ''))}<i class="fas fa-chevron-down text-[10px] text-slate-400"></i></div>`;
+  else if (f.type === 'date')
+    ctrl = `<div class="pf-input pf-wunit"><span>${esc(f.value)}</span><i class="fas fa-calendar-day text-slate-400"></i></div>`;
+  else if (f.type === 'num')
+    ctrl = `<div class="pf-input pf-wunit"><span>${esc(f.value)}</span>${unit}</div>`;
+  else if (f.type === 'radio')
+    ctrl = `<div class="flex gap-2 flex-wrap">${(f.opts || ['Yes', 'No']).map((o, i) =>
+      `<label class="pf-radio ${i === 0 ? 'active' : ''}"><span class="pf-dot"></span>${o}</label>`).join('')}</div>`;
+  else if (f.type === 'area')
+    ctrl = `<div class="pf-area">${esc(f.value) || '<span class="text-slate-300">' + (f.hint || '请输入…') + '</span>'}</div>`;
+  else if (f.type === 'time')
+    ctrl = `<div class="pf-input pf-wunit"><span>${esc(f.value)}</span><i class="fas fa-clock text-slate-400"></i></div>`;
+  else
+    ctrl = `<input class="pf-input" value="${esc(f.value)}">`;
+  return `<div class="pf-cell">${lbl}${ctrl}${f.hint && f.type !== 'area' ? `<span class="pf-hint">${f.hint}</span>` : ''}</div>`;
+}
+
+// 表单字段网格
+function pFieldGrid(fields) {
+  return `<div class="pf-grid">${fields.map(pField).join('')}</div>`;
+}
+
+// 底部 Back / Save Changes 行
+function pFooter(saveLabel = 'Save Changes') {
+  return `<div class="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-slate-100">
+    <button class="pf-back">Back</button>
+    <button class="btn btn-primary">${saveLabel}</button>
+  </div>`;
+}
+
+// 分页器 < 1 2 3 >
+function pPager(pages = 3, cur = 1) {
+  let html = `<div class="ppager"><span><i class="fas fa-angle-left"></i></span>`;
+  for (let i = 1; i <= pages; i++) html += `<span class="${i === cur ? 'active' : ''}">${i}</span>`;
+  html += `<span><i class="fas fa-angle-right"></i></span></div>`;
+  return html;
+}
+
+// ① 普通详情页(只读主键 + 表单 + Back/Save）
+function pDetailView(m) {
+  return `<div class="panel p-5 md:p-6">
+    ${pFieldGrid(m.fields || [])}
+    ${pFooter()}
+  </div>`;
+}
+
+// ② Inline Table 行编辑(行尾 ⊕ / 垃圾桶 + 顶部头字段 + 分页）
+function pInlineView(m) {
+  const head = m.header_fields ? `<div class="mb-5">${pFieldGrid(m.header_fields)}</div>` : '';
+  const cols = (m.columns || []).map(c => `<th>${c}</th>`).join('') + '<th class="text-right">操作</th>';
+  const rows = (m.rows || []).map((r, idx) => `<tr>
+    ${r.map((c, ci) => `<td>${ci === 0 ? c : `<span class="pf-cellinput">${esc(String(c))}</span>`}</td>`).join('')}
+    <td class="text-right whitespace-nowrap">
+      <button class="pf-rowbtn add"><i class="fas fa-plus"></i></button>
+      <button class="pf-rowbtn del"><i class="fas fa-trash-can"></i></button>
+    </td></tr>`).join('');
+  return `<div class="panel p-5 md:p-6">
+    ${head}
+    <div class="table-wrap"><table class="dtable">
+      <thead><tr>${cols}</tr></thead><tbody>${rows}</tbody>
+    </table></div>
+    ${pPager(3, 1)}
+    ${pFooter()}
+  </div>`;
+}
+
+// ③ 列表页(搜索筛选 + Download/+Add 已在 actions + 绿点状态表）
+function pListView(m) {
+  const filters = (m.filters || []).map(f =>
+    `<div class="pf-cell"><label class="pf-label">${f}</label><div class="pf-select text-slate-400">全部<i class="fas fa-chevron-down text-[10px]"></i></div></div>`).join('');
+  const cols = (m.columns || []).map(c => `<th>${c}</th>`).join('');
+  const rows = (m.rows || []).map(r => `<tr>${r.map((c, ci) =>
+    `<td>${ci === 0 ? `<span class="text-teal-600 font-medium cursor-pointer hover:underline">${esc(String(c))}</span>` : badgeCell(c)}</td>`).join('')}</tr>`).join('');
+  const filterPanel = filters ? `<div class="panel p-4 mb-4">
+    <div class="flex items-end gap-3 flex-wrap">
+      <div class="flex-1 grid grid-cols-2 md:grid-cols-3 gap-3">${filters}</div>
+      <label class="flex items-center gap-1.5 text-sm text-slate-600 whitespace-nowrap"><span class="pf-check"></span> Active Status only</label>
+      <div class="flex gap-2"><button class="pf-back">Clear</button><button class="btn btn-primary"><i class="fas fa-magnifying-glass"></i> Search</button></div>
+    </div></div>` : '';
+  return `${filterPanel}
+    <div class="panel p-1.5"><div class="table-wrap"><table class="dtable">
+      <thead><tr>${cols}</tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="px-3 pb-2">${pPager(3, 1)}</div>
+    </div>`;
+}
+
+// ④ 双栏穿梭框(候选 / 已选 + 箭头）
+function pShuttleView(m) {
+  const head = m.header_fields ? `<div class="mb-5">${pFieldGrid(m.header_fields)}</div>` : '';
+  const list = (items, side) => items.map(it =>
+    `<div class="shuttle-item"><span class="pf-check ${side === 'r' ? 'on' : ''}"></span>${esc(it)}</div>`).join('');
+  return `<div class="panel p-5 md:p-6">
+    ${head}
+    <div class="shuttle-wrap">
+      <div class="shuttle-col">
+        <div class="shuttle-title">${m.shuttle_left_title || '可选项'}</div>
+        <div class="shuttle-body">${list(m.left || [], 'l')}</div>
+      </div>
+      <div class="shuttle-arrows">
+        <button class="shuttle-arrow"><i class="fas fa-angle-right"></i></button>
+        <button class="shuttle-arrow"><i class="fas fa-angle-left"></i></button>
+      </div>
+      <div class="shuttle-col">
+        <div class="shuttle-title">${m.shuttle_right_title || '已选项'}</div>
+        <div class="shuttle-body">${list(m.right || [], 'r')}</div>
+      </div>
+    </div>
+    ${pFooter()}
+  </div>`;
+}
+
+// ⑤ Formula 公式编辑器
+function pFormulaView(m) {
+  const head = m.header_fields ? `<div class="mb-5">${pFieldGrid(m.header_fields)}</div>` : '';
+  const vars = (m.formula_vars || []).map(v => `<span class="fx-var" onclick="document.getElementById('fx-area')&&0">${v}</span>`).join('');
+  return `<div class="panel p-5 md:p-6">
+    ${head}
+    <div class="flex items-center justify-between mb-2">
+      <label class="pf-label mb-0">Eligibility Formula <span class="text-rose-500">*</span></label>
+      <button class="btn btn-ai text-xs py-1" onclick="openAI('HRStrategist','把这条假期资格规则翻译成公式')"><i class="fas fa-wand-magic-sparkles"></i> 自然语言生成公式</button>
+    </div>
+    <div class="fx-editor" id="fx-area"><pre>${esc(m.formula || "IF(HR.GENDER='M' AND HR.MARITAL='married',\n   ENTITLEMENT.DAYS + 3,\n   ENTITLEMENT.DAYS)")}</pre></div>
+    <div class="fx-toolbar">${vars || '<span class="fx-var">HR.GENDER</span><span class="fx-var">HR.MARITAL</span><span class="fx-var">SERVICE.YEARS</span><span class="fx-var">IF()</span><span class="fx-var">AND</span><span class="fx-var">OR</span>'}</div>
+    ${pFooter()}
+  </div>`;
+}
+
+// ⑥ 地图定位框
+function pMapView(m) {
+  return `<div class="panel p-5 md:p-6">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div>${pFieldGrid(m.fields || [])}</div>
+      <div>
+        <label class="pf-label">Map <span class="text-rose-500">*</span></label>
+        <div class="map-box">
+          <div class="map-grid"></div>
+          <i class="fas fa-location-dot map-pin"></i>
+          <div class="map-radius"></div>
+          <div class="map-hint"><i class="fas fa-circle-info"></i> 拖动图钉定位 · 半径 ${m.radius || '500'} 米打卡有效</div>
+        </div>
+      </div>
+    </div>
+    ${pFooter()}
+  </div>`;
+}
+
+// ⑦ Tabset 详情页(内部横向子 Tab）
+function pTabsetView(m) {
+  const tabs = (m.sub_tabs || []).map((t, i) => `<div class="ptab2 ${i === 0 ? 'active' : ''}">${t}</div>`).join('');
+  return `<div class="panel p-5 md:p-6">
+    <div class="ptab2-bar">${tabs}</div>
+    ${pFieldGrid(m.fields || [])}
+    ${pFooter()}
+  </div>`;
+}

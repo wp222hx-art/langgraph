@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.core.orchestrator import run_turn
-from app.data import enterprise, navigation, mock_db
+from app.data import enterprise, navigation, mock_db, paydaes_modules
 
 app = FastAPI(title="Paydaes ClaimGPT", version="3.0")
 
@@ -66,7 +66,7 @@ def bootstrap():
         "groups": enterprise.GROUPS,
         "roles": enterprise.ROLES,
         "languages": enterprise.LANGUAGES,
-        "nav": navigation.NAV_TREE,
+        "nav": navigation.NAV_TREE + paydaes_modules.PAYDAES_NAV,
         "agents": AGENTS,
     }
 
@@ -90,6 +90,16 @@ def compliance(country: str | None = None):
 @app.get("/api/module/{module_id}")
 def module_data(module_id: str, company: str = "sg"):
     """返回某个模块的工作区数据(表格/卡片)"""
+    # 先查 Paydaes 6 大域(税务/假期/考勤/财务/主数据/法定表单)
+    cur = "MYR"
+    for g in enterprise.GROUPS:
+        for c in g["companies"]:
+            if c["id"] == company:
+                cur = c.get("currency", "MYR")
+    pm = paydaes_modules.get_paydaes_module(module_id, cur)
+    if pm is not None:
+        return pm
+    # 回退原 18 模块逻辑
     from app.data.module_views import get_module_view
     return get_module_view(module_id, company)
 
