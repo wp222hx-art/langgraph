@@ -68,10 +68,11 @@ def build_graph():
 GRAPH = build_graph()
 
 
-def run_turn(user_input: str, thread_id: str = "default") -> dict:
+def run_turn(user_input: str, thread_id: str = "default", company: str = "sg") -> dict:
     """执行一轮编排,返回完整结果(含思考链、卡片、回复)"""
     config = {"configurable": {"thread_id": thread_id}}
-    init = {"user_input": user_input, "messages": [{"role": "user", "content": user_input}]}
+    init = {"user_input": user_input, "company": company,
+            "messages": [{"role": "user", "content": user_input}]}
     final = GRAPH.invoke(init, config)
     return {
         "reply": final.get("reply", ""),

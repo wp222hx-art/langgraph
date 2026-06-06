@@ -17,9 +17,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.core.orchestrator import run_turn
-from app.data import enterprise, navigation, mock_db, paydaes_modules
+from app.data import enterprise, navigation, mock_db, paydaes_modules, db, calc
 
 app = FastAPI(title="Paydaes ClaimGPT", version="3.0")
+
+# 启动即初始化真实持久化层(建表 + 首次播种)
+db.init_db()
 
 # ── 5 主 Agent 元信息 ──
 AGENTS = [
@@ -61,6 +64,29 @@ MODULES = [
 class ChatReq(BaseModel):
     message: str
     thread_id: str = "default"
+    company: str = "sg"
+
+
+class ClaimReq(BaseModel):
+    company: str = "sg"
+    type_code: str
+    merchant: str = ""
+    amount: float
+    currency: str = ""
+    note: str = ""
+    emp_id: str = ""
+
+
+class DecideReq(BaseModel):
+    status: str            # approved / rejected / paid
+    approver: str = "审批副驾"
+
+
+class FamilyReq(BaseModel):
+    company: str = "sg"
+    emp_id: str = ""
+    relation: str
+    name: str
 
 
 @app.get("/api/agents")
@@ -121,14 +147,95 @@ def get_modules():
 
 @app.post("/api/chat")
 def chat(req: ChatReq):
-    return run_turn(req.message, req.thread_id)
+    return run_turn(req.message, req.thread_id, req.company)
+
+
+# ═══════ 真实报销单 CRUD(SQLite 持久化) ═══════
+@app.get("/api/claims")
+def list_claims(company: str = "sg", status: str | None = None, emp_id: str | None = None):
+    """真实报销单列表(来自数据库)"""
+    rows = db.list_claims(company, status=status, emp_id=emp_id)
+    return {"claims": rows, "count": len(rows), "stats": db.claim_stats(company)}
+
+
+@app.get("/api/claims/{claim_id}")
+def get_claim(claim_id: str):
+    cl = db.get_claim(claim_id)
+    return cl or {"error": "not found"}
+
+
+@app.post("/api/claims")
+def create_claim(req: ClaimReq):
+    """表单提交报销单:真走计算引擎 + 真写库"""
+    company = req.company
+    cur = req.currency or db.COMPANY_CURRENCY.get(company, "CNY")
+    emp = db.get_employee(req.emp_id or None, company) or {}
+    ctype = db.get_claim_type(req.type_code, company)
+    if not ctype:
+        return {"error": f"unknown type_code {req.type_code}"}
+    base = calc.to_base_currency(req.amount, cur, db.COMPANY_CURRENCY.get(company, "CNY"))
+    tax = calc.deductible_tax(base, company)
+    val = calc.validate_limit(req.amount, ctype["limit_amt"], ctype["name"])
+    risk = calc.risk_score(req.amount, ctype["limit_amt"], exceed=not val["passed"])
+    saved = db.create_claim({
+        "company": company, "emp_id": emp.get("id", ""), "emp_name": emp.get("name", ""),
+        "type_code": ctype["code"], "type_name": ctype["name"], "merchant": req.merchant,
+        "amount": req.amount, "currency": cur, "amount_base": base, "tax_amount": tax,
+        "note": req.note, "risk_score": risk["score"], "risk_level": risk["level"],
+        "risk_reasons": risk["reasons"], "status": "pending", "source": "form",
+    })
+    return {"claim": saved, "validation": val, "risk": risk,
+            "tax_amount": tax, "amount_base": base}
+
+
+@app.post("/api/claims/{claim_id}/decide")
+def decide_claim(claim_id: str, req: DecideReq):
+    """审批:真改状态 + 留痕"""
+    cl = db.decide_claim(claim_id, req.status, req.approver)
+    return cl or {"error": "not found"}
+
+
+@app.post("/api/claims/batch_decide")
+def batch_decide(company: str = "sg", status: str = "approved", risk_level: str | None = None):
+    n = db.batch_decide(company, status, risk_level=risk_level)
+    return {"affected": n, "stats": db.claim_stats(company)}
+
+
+@app.get("/api/balance")
+def balance(company: str = "sg", emp_id: str | None = None):
+    return db.get_balance(emp_id, company)
+
+
+@app.get("/api/fx")
+def fx(base: str = "CNY"):
+    """真实交叉汇率表"""
+    majors = ["USD", "EUR", "CNY", "SGD", "MYR", "THB", "VND", "IDR", "HKD", "JPY", "GBP"]
+    return {"base": base, "rates": {m: calc.fx_rate(m, base) for m in majors}}
+
+
+@app.get("/api/tax_calc")
+def tax_calc(company: str = "sg", amount: float = 0):
+    """真实可抵扣税额计算"""
+    info = calc.tax_info(company)
+    return {**info, "amount": amount, "deductible": calc.deductible_tax(amount, company)}
+
+
+@app.post("/api/family")
+def add_family(req: FamilyReq):
+    emp = db.get_employee(req.emp_id or None, req.company) or {}
+    return db.add_family(emp.get("id", ""), req.company, req.relation, req.name)
+
+
+@app.get("/api/audit")
+def audit(company: str = "sg"):
+    return {"logs": db.recent_audit(company)}
 
 
 @app.get("/api/chat/stream")
-async def chat_stream(message: str, thread_id: str = "default"):
+async def chat_stream(message: str, thread_id: str = "default", company: str = "sg"):
     """SSE 流式:先推送思考过程,再逐字推送回复(打字机)"""
     async def gen():
-        result = run_turn(message, thread_id)
+        result = run_turn(message, thread_id, company)
 
         # 1) 路由信息
         yield _sse("route", {"agent": result["agent"], "module": result["module"],

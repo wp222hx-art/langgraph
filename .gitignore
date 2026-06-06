@@ -10,3 +10,8 @@ node_modules/
 *.tar.gz
 shots/
 shot.py
+
+# SQLite runtime db
+claimgpt.db
+claimgpt.db-wal
+claimgpt.db-shm

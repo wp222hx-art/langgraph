@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.data import mock_db
+from app.data import mock_db, db, calc
 
 
 # ─────────────────────────────────────────────
@@ -56,54 +56,73 @@ def intent_agent(text: str) -> dict[str, Any]:
 
 
 # ─────────────────────────────────────────────
-# ② ExtractionAgent — 多模态 OCR 信息抽取
+# ② ExtractionAgent — 多模态 OCR / 自然语言抽取
+# 阶段A: 从自然语言真抽金额 + 本地分类(查真表限额)
+# 阶段B: 接入 Vision LLM 后,有图走 OCR,无图走本函数兑底
 # ─────────────────────────────────────────────
-def extraction_agent(text: str) -> dict[str, Any]:
-    # 尝试从文本提取金额
-    amt = None
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(?:元|块|rmb|RMB)?", text)
-    if m:
-        amt = float(m.group(1))
-    ocr = mock_db.mock_ocr_invoice()
-    if amt:
-        ocr["amount"] = amt
-    return {"extracted": ocr}
-
-
-# ─────────────────────────────────────────────
-# ③ ValidationAgent — 业务规则合规校验
-# ─────────────────────────────────────────────
-def validation_agent(extracted: dict) -> dict[str, Any]:
-    cat = extracted.get("category", "")
-    amount = extracted.get("amount", 0)
-    ctype = next((t for t in mock_db.CLAIM_TYPES if t["name"] == cat), None)
-    issues = []
+def extraction_agent(text: str, company: str = "sg") -> dict[str, Any]:
+    amt = calc.parse_amount(text)
+    ctype = calc.guess_type(text, company)
+    cur = db.COMPANY_CURRENCY.get(company, "CNY")
     if ctype:
-        if amount > ctype["limit"]:
-            issues.append(f"金额 {amount} 超过【{cat}】单笔限额 {ctype['limit']} 元")
+        extracted = {
+            "merchant": _guess_merchant(text) or ctype["name"],
+            "category": ctype["name"], "type_code": ctype["code"],
+            "amount": amt if amt is not None else 0.0,
+            "currency": cur, "date": "", "tax_no": "",
+        }
     else:
-        issues.append(f"未匹配到报销类型「{cat}」")
-    return {"validation": {"passed": len(issues) == 0, "issues": issues, "type": ctype}}
+        # 未能本地分类:退回示例 OCR(阶段B Vision LLM 会替代)
+        ocr = mock_db.mock_ocr_invoice()
+        ct = db.get_claim_type(ocr.get("category", ""), company)
+        ocr["type_code"] = ct["code"] if ct else ""
+        ocr["currency"] = cur
+        if amt is not None:
+            ocr["amount"] = amt
+        extracted = ocr
+    return {"extracted": extracted}
+
+
+_MERCHANT_KWS = {
+    "海底捞": "海底捞火锅", "滴滴": "滴滴出行", "打车": "滴滴出行",
+    "酒店": "酒店住宿", "机票": "携程机票", "京东": "京东商城",
+}
+
+
+def _guess_merchant(text: str) -> str | None:
+    for kw, name in _MERCHANT_KWS.items():
+        if kw in text:
+            return name
+    return None
 
 
 # ─────────────────────────────────────────────
-# ④ RiskAgent — 风险评分与反欺诈
+# ③ ValidationAgent — 业务规则合规校验(真实限额比对)
+# ─────────────────────────────────────────────
+def validation_agent(extracted: dict, company: str = "sg") -> dict[str, Any]:
+    cat = extracted.get("category", "")
+    code = extracted.get("type_code", "")
+    amount = extracted.get("amount", 0) or 0
+    ctype = db.get_claim_type(code, company) or db.get_claim_type(cat, company)
+    if not ctype:
+        return {"validation": {"passed": False, "issues": [
+            {"code": "NO_TYPE", "zh": f"未匹配到报销类型「{cat}」",
+             "en": f"No matching claim type for {cat}"}], "type": None}}
+    res = calc.validate_limit(amount, ctype["limit_amt"], ctype["name"])
+    res["type"] = ctype
+    return {"validation": res}
+
+
+# ─────────────────────────────────────────────
+# ④ RiskAgent — 风险评分与反欺诈(多因子真加权)
 # ─────────────────────────────────────────────
 def risk_agent(extracted: dict, validation: dict) -> dict[str, Any]:
-    score = 10
-    reasons = []
-    if not validation.get("passed"):
-        score += 50
-        reasons.append("触发合规校验异常")
-    amount = extracted.get("amount", 0)
-    if amount > 1000:
-        score += 25
-        reasons.append("大额报销")
-    if amount > 3000:
-        score += 15
-        reasons.append("超大额需重点关注")
-    level = "低" if score < 30 else ("中" if score < 60 else "高")
-    return {"risk": {"score": min(score, 99), "level": level, "reasons": reasons or ["无明显风险"]}}
+    amount = extracted.get("amount", 0) or 0
+    ctype = validation.get("type") or {}
+    limit_amt = ctype.get("limit_amt", 0)
+    exceed = not validation.get("passed", True) and bool(validation.get("issues"))
+    no_invoice = not extracted.get("tax_no")
+    return {"risk": calc.risk_score(amount, limit_amt, exceed=exceed, no_invoice=no_invoice)}
 
 
 # ─────────────────────────────────────────────
@@ -135,8 +154,35 @@ def workflow_agent(action: str) -> dict[str, Any]:
 # ─────────────────────────────────────────────
 # ⑦ InsightAgent — 数据聚合与归因分析(NL2SQL)
 # ─────────────────────────────────────────────
-def insight_agent(module: str, text: str) -> dict[str, Any]:
-    return {"report": mock_db.mock_report_data(module + text)}
+def insight_agent(module: str, text: str, company: str = "sg") -> dict[str, Any]:
+    # 阶段A: 从真实报销库聚合出报表(而非 mock)
+    claims = db.list_claims(company, limit=500)
+    if not claims:
+        return {"report": mock_db.mock_report_data(module + text)}
+    cur = db.COMPANY_CURRENCY.get(company, "CNY")
+    if "差旅" in module:
+        buckets = {}
+        for c in claims:
+            if c["type_code"] in ("FLIGHT", "HOTEL", "TRAIN"):
+                buckets[c["type_name"]] = buckets.get(c["type_name"], 0) + c["amount_base"]
+        labels = list(buckets.keys()) or ["机票", "住宿"]
+        data = [round(buckets.get(l, 0), 2) for l in labels]
+        total = round(sum(data), 2)
+        return {"report": {"labels": labels,
+                           "series": [{"name": f"差旅支出({cur})", "data": data}],
+                           "insight": f"差旅类报销合计 {total} {cur},其中 {labels[0] if labels else ''} 占比最高。"}}
+    # 默认: 按部门聚合报销总额
+    by_dept = {}
+    for c in claims:
+        emp = db.get_employee(c["emp_id"], company)
+        dept = emp["dept"] if emp else "其他"
+        by_dept[dept] = by_dept.get(dept, 0) + c["amount_base"]
+    labels = list(by_dept.keys())
+    data = [round(by_dept[l], 2) for l in labels]
+    top = labels[data.index(max(data))] if data else "-"
+    return {"report": {"labels": labels,
+                       "series": [{"name": f"报销总额({cur})", "data": data}],
+                       "insight": f"{top} 报销额最高。共 {len(claims)} 笔单据,合计 {round(sum(data),2)} {cur}。"}}
 
 
 # ─────────────────────────────────────────────
