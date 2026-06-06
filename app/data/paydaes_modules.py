@@ -397,7 +397,71 @@ def _master_modules(cur: str) -> dict:
     }
 
 
-def get_paydaes_module(module_id: str, cur: str = "MYR") -> dict | None:
+# ── 模块文案 i18n 表(domain / 常见 desc 片段 / actions) ──
+# title 采用「English · 中文」双语共显,无需翻译;此处只翻 domain / desc / actions
+_DOMAIN_EN = {
+    "税务合规": "Statutory Tax", "假期管理": "Leave", "考勤管理": "Time & Attendance",
+    "财务做账": "Accounting", "主数据": "Master Data",
+}
+_ACTION_EN = {
+    "新增权益": "+ Add Entitlement", "新增类型": "+ Add Type", "新增": "+ Add",
+    "新增班次": "+ Add Shift", "新增地点": "+ Add Location", "新增科目": "+ Add Account",
+    "新增银行": "+ Add Bank", "新增变量": "+ Add Variable", "新增假期": "+ Add Leave Type",
+    "新增排班组": "+ Add Schedule Group", "新增假日": "+ Add Holiday",
+    "新增加班规则": "+ Add OT Rule", "新增科目表": "+ Add CoA", "新增分组": "+ Add Group",
+    "新增税率": "+ Add Rate", "新增参数": "+ Add Parameter",
+    "下载": "Download", "导出": "Export", "导入": "Import", "保存": "Save Changes",
+    "AI 自动算税": "AI Auto Tax", "AI智能排班": "AI Smart Roster",
+    "AI 异常检测": "AI Anomaly Detect", "AI 自动归集": "AI Auto Collect",
+    "AI 科目映射": "AI Account Mapping", "自然语言生成公式": "NL→Formula",
+}
+_DESC_EN = {
+    "leave_entitlement": "Define leave eligibility rules with Eligibility / Pro Rata / Carry Forward / Advance.",
+    "tax_rate": "Maintain country tax brackets and rates; supports effective-dated versions.",
+    "tax_param": "Statutory tax parameters such as relief, rebate and round rules.",
+    "tax_tp1": "Tax exemption (TP1) limit table maintained per category.",
+    "tax_receipt": "Statutory tax receipts and submission records.",
+    "ea_setting": "Configure EA form fields and mapping for year-end statements.",
+    "ec_setting": "Configure EC form fields and mapping.",
+    "leave_type": "Define leave types, accrual and approval flow.",
+    "leave_group": "Group leave policies for assignment to employees.",
+    "shift": "Define work shifts, time bands and break rules.",
+    "schedule_group": "Group shifts into rotating schedule patterns.",
+    "holiday": "Maintain public-holiday calendar per country.",
+    "attendance_loc": "Configure GPS clock-in locations and valid radius.",
+    "overtime": "Configure overtime rules, multipliers and approval.",
+    "coa": "Maintain the Chart of Accounts hierarchy.",
+    "element_group": "Group payroll/expense elements for posting.",
+    "gl_account": "Maintain GL account numbers and mapping.",
+    "bank": "Maintain bank master data for payment files.",
+    "payroll_var": "Define payroll variables used in formulas.",
+}
+
+
+def _localize_module(mod: dict, module_id: str, lang: str) -> dict:
+    """按语言本地化模块的 domain / desc / actions(title 双语共显不动)"""
+    if lang != "en":
+        return mod
+    m = dict(mod)
+    if m.get("domain") in _DOMAIN_EN:
+        m["domain"] = _DOMAIN_EN[m["domain"]]
+    if module_id in _DESC_EN:
+        m["desc"] = _DESC_EN[module_id]
+    if m.get("actions"):
+        m["actions"] = [_ACTION_EN.get(a, a) for a in m["actions"]]
+    if m.get("filters"):
+        m["filters"] = [_FILTER_EN.get(f, f) for f in m["filters"]]
+    return m
+
+
+_FILTER_EN = {
+    "国家": "Country", "状态": "Status", "类型": "Type", "生效日期": "Effective Date",
+    "币种": "Currency", "科目类型": "Account Type", "银行": "Bank", "分组": "Group",
+    "年度": "Year", "假期类型": "Leave Type", "地点": "Location",
+}
+
+
+def get_paydaes_module(module_id: str, cur: str = "MYR", lang: str = "zh") -> dict | None:
     """返回 Paydaes 6 大域模块视图;不存在返回 None(交回原 18 模块逻辑)"""
     registry = {}
     registry.update(_tax_modules(cur))
@@ -405,38 +469,41 @@ def get_paydaes_module(module_id: str, cur: str = "MYR") -> dict | None:
     registry.update(_ta_modules(cur))
     registry.update(_acc_modules(cur))
     registry.update(_master_modules(cur))
-    return registry.get(module_id)
+    mod = registry.get(module_id)
+    if mod is None:
+        return None
+    return _localize_module(mod, module_id, lang)
 
 
 # 供导航树使用:Paydaes 6 大域菜单(全量铺开)
 PAYDAES_NAV = [
-    {"id": "tax", "name": "税务合规", "icon": "fa-percent", "type": "group", "badge": "NEW", "children": [
-        {"id": "tax_rate", "name": "Tax Rate Table", "module": "税率表"},
-        {"id": "tax_param", "name": "Tax Parameters", "module": "税务参数"},
-        {"id": "tax_tp1", "name": "Tax Exemption (TP1)", "module": "免税限额"},
-        {"id": "tax_receipt", "name": "Tax Receipt", "module": "税务回单"},
-        {"id": "ea_setting", "name": "EA Setting", "module": "EA表单"},
-        {"id": "ec_setting", "name": "EC Setting", "module": "EC表单"},
+    {"id": "tax", "name": "税务合规", "name_en": "Statutory Tax", "icon": "fa-percent", "type": "group", "badge": "NEW", "children": [
+        {"id": "tax_rate", "name": "税率表", "name_en": "Tax Rate Table", "module": "税率表"},
+        {"id": "tax_param", "name": "税务参数", "name_en": "Tax Parameters", "module": "税务参数"},
+        {"id": "tax_tp1", "name": "免税限额 (TP1)", "name_en": "Tax Exemption (TP1)", "module": "免税限额"},
+        {"id": "tax_receipt", "name": "税务回单", "name_en": "Tax Receipt", "module": "税务回单"},
+        {"id": "ea_setting", "name": "EA 表单", "name_en": "EA Setting", "module": "EA表单"},
+        {"id": "ec_setting", "name": "EC 表单", "name_en": "EC Setting", "module": "EC表单"},
     ]},
-    {"id": "leave", "name": "假期管理", "icon": "fa-umbrella-beach", "type": "group", "badge": "NEW", "children": [
-        {"id": "leave_entitlement", "name": "Leave Entitlement", "module": "假期权益"},
-        {"id": "leave_type", "name": "Leave Type", "module": "假期类型"},
-        {"id": "leave_group", "name": "Leave Group", "module": "假期组"},
+    {"id": "leave", "name": "假期管理", "name_en": "Leave", "icon": "fa-umbrella-beach", "type": "group", "badge": "NEW", "children": [
+        {"id": "leave_entitlement", "name": "假期权益", "name_en": "Leave Entitlement", "module": "假期权益"},
+        {"id": "leave_type", "name": "假期类型", "name_en": "Leave Type", "module": "假期类型"},
+        {"id": "leave_group", "name": "假期组", "name_en": "Leave Group", "module": "假期组"},
     ]},
-    {"id": "ta", "name": "考勤管理", "icon": "fa-business-time", "type": "group", "badge": "NEW", "children": [
-        {"id": "shift", "name": "Shift", "module": "班次"},
-        {"id": "schedule_group", "name": "Schedule Group", "module": "排班组"},
-        {"id": "holiday", "name": "Holiday Schedule", "module": "假日表"},
-        {"id": "attendance_loc", "name": "Attendance Location", "module": "打卡地点"},
-        {"id": "overtime", "name": "Overtime Setting", "module": "加班设置"},
+    {"id": "ta", "name": "考勤管理", "name_en": "Time & Attendance", "icon": "fa-business-time", "type": "group", "badge": "NEW", "children": [
+        {"id": "shift", "name": "班次", "name_en": "Shift", "module": "班次"},
+        {"id": "schedule_group", "name": "排班组", "name_en": "Schedule Group", "module": "排班组"},
+        {"id": "holiday", "name": "假日表", "name_en": "Holiday Schedule", "module": "假日表"},
+        {"id": "attendance_loc", "name": "打卡地点", "name_en": "Attendance Location", "module": "打卡地点"},
+        {"id": "overtime", "name": "加班设置", "name_en": "Overtime Setting", "module": "加班设置"},
     ]},
-    {"id": "accounting", "name": "财务做账", "icon": "fa-book", "type": "group", "badge": "NEW", "children": [
-        {"id": "coa", "name": "Chart of Accounts", "module": "会计科目表"},
-        {"id": "element_group", "name": "Element Grouping", "module": "要素分组"},
-        {"id": "gl_account", "name": "GL Account Number", "module": "总账科目"},
+    {"id": "accounting", "name": "财务做账", "name_en": "Accounting", "icon": "fa-book", "type": "group", "badge": "NEW", "children": [
+        {"id": "coa", "name": "会计科目表", "name_en": "Chart of Accounts", "module": "会计科目表"},
+        {"id": "element_group", "name": "要素分组", "name_en": "Element Grouping", "module": "要素分组"},
+        {"id": "gl_account", "name": "总账科目", "name_en": "GL Account Number", "module": "总账科目"},
     ]},
-    {"id": "master", "name": "主数据", "icon": "fa-database", "type": "group", "badge": "NEW", "children": [
-        {"id": "bank", "name": "Bank", "module": "银行"},
-        {"id": "payroll_var", "name": "Payroll Variable", "module": "薪资变量"},
+    {"id": "master", "name": "主数据", "name_en": "Master Data", "icon": "fa-database", "type": "group", "badge": "NEW", "children": [
+        {"id": "bank", "name": "银行", "name_en": "Bank", "module": "银行"},
+        {"id": "payroll_var", "name": "薪资变量", "name_en": "Payroll Variable", "module": "薪资变量"},
     ]},
 ]

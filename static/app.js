@@ -6,7 +6,8 @@ const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<
 
 const S = {           // 全局状态
   groups: [], roles: [], languages: [], nav: [], agents: [],
-  group: null, company: null, role: null, lang: 'zh',
+  group: null, company: null, role: null,
+  get lang() { return getLang(); },
   currentNav: 'dashboard', currentAgent: null,
   threadId: 'web-' + Math.random().toString(36).slice(2, 8),
 };
@@ -19,6 +20,13 @@ async function boot() {
   S.company = d.groups[0].companies[0];
   S.role = d.roles.find(r => r.id === 'sys_admin');
   S.currentAgent = d.agents[0];
+  // i18n:语言切换时重扫静态 DOM + 重渲染动态区(导航/当前页/智能体条)
+  onLangChange(() => {
+    renderTopbar(); renderNav(); renderAgentTabs();
+    go(S.currentNav);
+    if ($('#ai-messages').dataset.init) selectAgent(S.currentAgent);
+  });
+  applyI18n();                    // 首次翻译静态 DOM
   renderTopbar(); renderNav(); renderAgentTabs();
   go('dashboard');
   bindGlobal();
@@ -28,13 +36,25 @@ async function boot() {
 function renderTopbar() {
   $('#group-logo').textContent = S.group.logo;
   $('#group-logo').style.background = S.group.color;
-  $('#group-name').textContent = S.group.name;
+  $('#group-name').textContent = nameOf(S.group);
   $('#company-flag').textContent = S.company.flag;
-  $('#company-name').textContent = S.company.name;
-  $('#role-name').textContent = S.role.name;
+  $('#company-name').textContent = nameOf(S.company);
+  $('#role-name').textContent = nameOf(S.role);
   $('#role-avatar').innerHTML = `<i class="fas ${S.role.icon}"></i>`;
   $('#role-avatar').style.background = S.role.color;
   $('#lang-flag').textContent = (S.languages.find(l => l.code === S.lang) || {}).flag || '🇨🇳';
+}
+
+// 双语取名:对象带 name_en 时按当前语言取,否则回退 name
+function nameOf(o) {
+  if (!o) return '';
+  if (S.lang === 'en' && o.name_en) return o.name_en;
+  return o.name || o.name_en || '';
+}
+function descOf(o) {
+  if (!o) return '';
+  if (S.lang === 'en' && o.desc_en) return o.desc_en;
+  return o.desc || o.desc_en || '';
 }
 
 // ════════ 左侧导航树(按角色过滤) ════════
@@ -43,15 +63,15 @@ function renderNav() {
   const html = S.nav.filter(n => allow.includes(n.id)).map(n => {
     if (n.type === 'page') {
       return `<div class="nav-item ${S.currentNav === n.id ? 'active' : ''}" data-nav="${n.id}">
-        <i class="fas ${n.icon}"></i><span>${n.name}</span>
+        <i class="fas ${n.icon}"></i><span>${nameOf(n)}</span>
         ${n.badge ? `<span class="b-new ml-auto">${n.badge}</span>` : ''}</div>`;
     }
     const kids = n.children.map(c =>
-      `<div class="nav-sub ${S.currentNav === c.id ? 'active' : ''}" data-nav="${c.id}" data-module="${c.module}">${c.name}</div>`).join('');
+      `<div class="nav-sub ${S.currentNav === c.id ? 'active' : ''}" data-nav="${c.id}" data-module="${c.module}">${nameOf(c)}</div>`).join('');
     const open = n.children.some(c => c.id === S.currentNav);
     return `<div data-group="${n.id}">
       <div class="nav-group-title" onclick="toggleGroup('${n.id}')">
-        <i class="fas ${n.icon}"></i><span>${n.name}</span>
+        <i class="fas ${n.icon}"></i><span>${nameOf(n)}</span>
         <i class="fas fa-chevron-${open ? 'down' : 'right'} text-[10px] text-slate-300 ml-auto group-arrow"></i>
       </div>
       <div class="nav-children ${open ? '' : 'hidden'}" data-children="${n.id}">${kids}</div>
@@ -89,46 +109,47 @@ async function renderDashboard() {
     <div class="kpi-card">
       <div class="flex items-center justify-between">
         <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white" style="background:${k.color}"><i class="fas ${k.icon}"></i></div>
-        <span class="badge ${k.trend.includes('+') ? 'b-low' : 'b-info'}">${k.trend}</span>
+        <span class="badge ${k.trend.includes('+') ? 'b-low' : 'b-info'}">${S.lang === 'en' && k.trend_en ? k.trend_en : k.trend}</span>
       </div>
-      <div class="mt-3 text-2xl font-bold text-slate-900">${k.value}<span class="text-sm font-normal text-slate-400 ml-1">${k.unit}</span></div>
-      <div class="text-xs text-slate-400 mt-0.5">${k.label}</div>
+      <div class="mt-3 text-2xl font-bold text-slate-900">${k.value}<span class="text-sm font-normal text-slate-400 ml-1">${S.lang === 'en' && k.unit_en !== undefined ? k.unit_en : k.unit}</span></div>
+      <div class="text-xs text-slate-400 mt-0.5">${S.lang === 'en' && k.label_en ? k.label_en : k.label}</div>
     </div>`).join('');
-  const todos = d.todos.map(t => `
+  const todos = d.todos.map(td => `
     <div class="flex items-center gap-3 py-2.5 border-b border-slate-50 last:border-0">
-      <span class="w-1.5 h-1.5 rounded-full" style="background:${t.level === 'high' ? '#ef4444' : '#f59e0b'}"></span>
-      <span class="flex-1 text-sm text-slate-700">${t.title}</span>
-      <span class="badge b-info">${t.type}</span>
-      <button class="btn btn-ai text-xs py-1" onclick="openAI('${t.agent}','${t.title}')"><i class="fas fa-robot"></i> 交给AI</button>
+      <span class="w-1.5 h-1.5 rounded-full" style="background:${td.level === 'high' ? '#ef4444' : '#f59e0b'}"></span>
+      <span class="flex-1 text-sm text-slate-700">${S.lang === 'en' && td.title_en ? td.title_en : td.title}</span>
+      <span class="badge b-info">${S.lang === 'en' && td.type_en ? td.type_en : td.type}</span>
+      <button class="btn btn-ai text-xs py-1" onclick="openAI('${td.agent}','${td.title}')"><i class="fas fa-robot"></i> ${t('ai.give_to_ai')}</button>
     </div>`).join('');
   $('#view').innerHTML = `
     <div class="flex items-center justify-between mb-5 flex-wrap gap-2">
-      <div><h1 class="page-title">工作台</h1><p class="text-sm text-slate-400 mt-0.5">${S.company.flag} ${S.company.name} · ${S.group.name}</p></div>
-      <button class="btn btn-ai" onclick="toggleAI(true)"><i class="fas fa-robot"></i> 唤起 AI 智能体</button>
+      <div><h1 class="page-title">${t('dashboard.title')}</h1><p class="text-sm text-slate-400 mt-0.5">${S.company.flag} ${nameOf(S.company)} · ${nameOf(S.group)}</p></div>
+      <button class="btn btn-ai" onclick="toggleAI(true)"><i class="fas fa-robot"></i> ${t('ai.summon')}</button>
     </div>
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-5">${kpi}</div>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div class="panel p-5 lg:col-span-2">
-        <div class="font-semibold text-slate-800 mb-3">报销趋势分析</div>
+        <div class="font-semibold text-slate-800 mb-3">${t('dashboard.trend')}</div>
         <div class="chart-box"><canvas id="dash-chart"></canvas></div>
       </div>
       <div class="panel p-5">
-        <div class="font-semibold text-slate-800 mb-1">待办事项 <span class="badge b-high ml-1">${d.todos.length}</span></div>
+        <div class="font-semibold text-slate-800 mb-1">${t('dashboard.todos')} <span class="badge b-high ml-1">${d.todos.length}</span></div>
         <div>${todos}</div>
       </div>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-5">
       ${S.agents.map(a => `<div class="panel p-4 cursor-pointer hover:shadow-md transition" onclick="openAI('${a.id}','')">
         <div class="text-2xl mb-1">${a.emoji}</div>
-        <div class="font-semibold text-sm text-slate-800">${a.name}</div>
-        <div class="text-[11px] text-slate-400 mt-1 leading-snug">${a.desc}</div>
-        <div class="text-[10px] text-teal-500 mt-2">${a.modules.length} 个模块</div>
+        <div class="font-semibold text-sm text-slate-800">${nameOf(a)}</div>
+        <div class="text-[11px] text-slate-400 mt-1 leading-snug">${descOf(a)}</div>
+        <div class="text-[10px] text-teal-500 mt-2">${a.modules.length} ${t('dashboard.modules_count')}</div>
       </div>`).join('')}
     </div>`;
+  const chLabels = (S.lang === 'en' && d.chart.labels_en) ? d.chart.labels_en : d.chart.labels;
   new Chart($('#dash-chart'), {
     type: 'line',
-    data: { labels: d.chart.labels, datasets: d.chart.series.map((s, i) => ({
-      label: s.name, data: s.data, borderColor: i ? '#ec4899' : '#20c997',
+    data: { labels: chLabels, datasets: d.chart.series.map((s, i) => ({
+      label: (S.lang === 'en' && s.name_en) ? s.name_en : s.name, data: s.data, borderColor: i ? '#ec4899' : '#20c997',
       backgroundColor: i ? 'rgba(236,72,153,.1)' : 'rgba(32,201,151,.12)', fill: true, tension: .4 })) },
     options: { plugins: { legend: { labels: { font: { size: 11 } } } }, scales: { y: { beginAtZero: true } }, responsive: true, maintainAspectRatio: false }
   });
@@ -136,7 +157,7 @@ async function renderDashboard() {
 
 // ════════ 18 模块工作区 ════════
 async function renderModule(navId) {
-  const m = await fetch(`/api/module/${navId}?company=${S.company.id}`).then(r => r.json());
+  const m = await fetch(`/api/module/${navId}?company=${S.company.id}&lang=${S.lang}`).then(r => r.json());
   const actions = (m.actions || []).map((a, i) =>
     `<button class="btn ${a.includes('AI') ? 'btn-ai' : (i === 0 ? 'btn-primary' : 'btn-ghost')}" onclick="moduleAction('${a}','${m.title}')">
       ${a.includes('AI') ? '<i class=\"fas fa-robot\"></i>' : '<i class=\"fas fa-plus\"></i>'} ${a}</button>`).join('');
@@ -177,9 +198,9 @@ function tableView(m) {
 }
 function badgeCell(c) {
   const s = String(c);
-  if (s === '高') return `<span class="badge b-high">高</span>`;
-  if (s === '中') return `<span class="badge b-mid">中</span>`;
-  if (s === '低') return `<span class="badge b-low">低</span>`;
+  if (s === '高') return `<span class="badge b-high">${t('common.high')}</span>`;
+  if (s === '中') return `<span class="badge b-mid">${t('common.mid')}</span>`;
+  if (s === '低') return `<span class="badge b-low">${t('common.low')}</span>`;
   if (s.includes('✅') || s.includes('已批') || s.includes('生效') || s.includes('已支付')) return `<span class="badge b-low">${s}</span>`;
   if (s.includes('审批中') || s.includes('进行中') || s.includes('⚠️')) return `<span class="badge b-mid">${s}</span>`;
   return s;
@@ -283,31 +304,31 @@ async function renderCompliance() {
   const cards = Object.entries(d.countries).map(([code, c]) => `
     <div class="country-card" onclick="showCountry('${code}')">
       <div class="flex items-center gap-2 mb-3"><span class="text-3xl">${c.flag}</span>
-        <div><div class="font-semibold text-slate-800">${c.name}</div><div class="text-xs text-slate-400">${c.name_en} · ${c.currency}</div></div></div>
+        <div><div class="font-semibold text-slate-800">${S.lang === 'en' ? c.name_en : c.name}</div><div class="text-xs text-slate-400">${S.lang === 'en' ? c.name : c.name_en} · ${c.currency}</div></div></div>
       <div class="space-y-1.5 text-sm">
-        <div class="flex justify-between"><span class="text-slate-400">税种</span><b class="text-slate-700">${c.tax.name}</b></div>
-        <div class="flex justify-between"><span class="text-slate-400">税率</span><span class="badge b-info">${c.tax.rate}</span></div>
-        <div class="flex justify-between"><span class="text-slate-400">会计准则</span><span class="text-slate-600 text-xs">${c.accounting.standard.split(' ')[0]}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">${t('compliance.tax_type')}</span><b class="text-slate-700">${c.tax.name}</b></div>
+        <div class="flex justify-between"><span class="text-slate-400">${t('compliance.tax_rate')}</span><span class="badge b-info">${c.tax.rate}</span></div>
+        <div class="flex justify-between"><span class="text-slate-400">${t('compliance.accounting_std')}</span><span class="text-slate-600 text-xs">${c.accounting.standard.split(' ')[0]}</span></div>
       </div>
-      <div class="text-xs text-teal-500 mt-3"><i class="fas fa-arrow-right"></i> 查看完整合规体系</div>
+      <div class="text-xs text-teal-500 mt-3"><i class="fas fa-arrow-right"></i> ${t('compliance.view_full')}</div>
     </div>`).join('');
   $('#view').innerHTML = `
-    <div class="mb-5"><h1 class="page-title"><i class="fas fa-earth-asia text-cyan-500"></i> 全球合规中心</h1>
-      <p class="text-sm text-slate-400 mt-1">调用全球各国税收、报销、做账体系 · 切换公司自动适配本地合规</p></div>
+    <div class="mb-5"><h1 class="page-title"><i class="fas fa-earth-asia text-cyan-500"></i> ${t('compliance.title')}</h1>
+      <p class="text-sm text-slate-400 mt-1">${t('compliance.subtitle')}</p></div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">${cards}</div>`;
 }
 async function showCountry(code) {
   const c = await fetch(`/api/compliance?country=${code}`).then(r => r.json());
   popover(`
     <div class="px-4 py-3 border-b border-slate-100"><div class="flex items-center gap-2"><span class="text-2xl">${c.flag}</span>
-      <div><div class="font-bold text-slate-800">${c.name} 合规体系</div><div class="text-xs text-slate-400">${c.name_en}</div></div></div></div>
+      <div><div class="font-bold text-slate-800">${S.lang === 'en' ? c.name_en : c.name} ${t('compliance.system_suffix')}</div><div class="text-xs text-slate-400">${S.lang === 'en' ? c.name : c.name_en}</div></div></div></div>
     <div class="p-4 space-y-3 text-sm">
-      <div><div class="text-xs text-slate-400 mb-1"><i class="fas fa-percent text-pink-400"></i> 税收体系</div>
+      <div><div class="text-xs text-slate-400 mb-1"><i class="fas fa-percent text-pink-400"></i> ${t('compliance.tax_system')}</div>
         <div class="bg-slate-50 rounded-lg p-3"><b>${c.tax.name}</b> · 税率 ${c.tax.rate}<br><span class="text-slate-500 text-xs">${c.tax.authority} · ${c.tax.filing}</span></div></div>
-      <div><div class="text-xs text-slate-400 mb-1"><i class="fas fa-receipt text-teal-500"></i> 报销规则</div>
+      <div><div class="text-xs text-slate-400 mb-1"><i class="fas fa-receipt text-teal-500"></i> ${t('compliance.claim_rules')}</div>
         <ul class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 space-y-1">${c.claim_rules.map(r => `<li>• ${r}</li>`).join('')}</ul></div>
-      <div><div class="text-xs text-slate-400 mb-1"><i class="fas fa-book text-amber-400"></i> 做账体系</div>
-        <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600">准则:${c.accounting.standard}<br>财年:${c.accounting.fiscal}<br>科目:${c.accounting.elements.join(' / ')}</div></div>
+      <div><div class="text-xs text-slate-400 mb-1"><i class="fas fa-book text-amber-400"></i> ${t('compliance.accounting_system')}</div>
+        <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600">${t('compliance.standard')}:${c.accounting.standard}<br>${t('compliance.fiscal')}:${c.accounting.fiscal}<br>${t('compliance.elements')}:${c.accounting.elements.join(' / ')}</div></div>
     </div>`, { center: true, wide: true });
 }
 window.showCountry = showCountry;
@@ -348,10 +369,10 @@ function switchCompany(gid, cid) {
 window.switchCompany = switchCompany;
 
 function showRolePop(e) {
-  const html = `<div class="pop-head">切换角色(体验不同权限)</div>` + S.roles.map(r =>
+  const html = `<div class="pop-head">${t('role.switch_title')}</div>` + S.roles.map(r =>
     `<div class="pop-item ${r.id === S.role.id ? 'active' : ''}" onclick="switchRole('${r.id}')">
       <span class="w-7 h-7 rounded-full text-white text-xs flex items-center justify-center" style="background:${r.color}"><i class="fas ${r.icon}"></i></span>
-      <div class="flex-1"><div>${r.name}</div><div class="text-[11px] text-slate-400">${r.desc}</div></div></div>`).join('');
+      <div class="flex-1"><div>${nameOf(r)}</div><div class="text-[11px] text-slate-400">${descOf(r)}</div></div></div>`).join('');
   popover(html, { anchor: e.currentTarget, wide: true });
 }
 function switchRole(id) {
@@ -366,7 +387,7 @@ function showLangPop(e) {
     <span>${l.flag}</span><span class="flex-1">${l.name}</span></div>`).join('');
   popover(html, { anchor: e.currentTarget });
 }
-function switchLang(code) { S.lang = code; renderTopbar(); closePopover(); }
+function switchLang(code) { setLang(code); $('#lang-flag').textContent = (S.languages.find(l => l.code === code) || {}).flag || '🇨🇳'; closePopover(); }
 window.switchLang = switchLang;
 
 // ════════ 通用弹层 ════════
@@ -413,8 +434,9 @@ window.selectAgentById = selectAgentById;
 function selectAgent(a) {
   S.currentAgent = a;
   $$('#agent-tabs .agent-tab').forEach(t => t.classList.toggle('active', t.dataset.aid === a.id));
-  $('#ai-samples').innerHTML = a.samples.map(s => `<span class="sample-chip" onclick="quickAI('${s}')">${s}</span>`).join('');
-  addAIMsg(`${a.emoji} 你好,我是**${a.name}**。${a.desc}。`, false);
+  const samples = (S.lang === 'en' && a.samples_en) ? a.samples_en : a.samples;
+  $('#ai-samples').innerHTML = samples.map(s => `<span class="sample-chip" onclick="quickAI(this.textContent)">${s}</span>`).join('');
+  addAIMsg(`${a.emoji} ${t('ai.hello')} **${nameOf(a)}**。${descOf(a)}。`, false);
 }
 function quickAI(t) { $('#ai-input').value = t; sendAI(); }
 window.quickAI = quickAI;
@@ -436,7 +458,7 @@ function sendAI() {
   const tid = 'tk' + Date.now();
   $('#ai-messages').insertAdjacentHTML('beforeend',
     `<div class="msg-ai"><span class="text-lg mt-0.5">${S.currentAgent.emoji}</span><div class="flex-1 space-y-2"><div class="think-box" id="${tid}">
-      <div class="text-slate-400"><span class="think-dot">●</span> 智能体团队协作思考中…</div></div></div></div>`);
+      <div class="text-slate-400"><span class="think-dot">●</span> ${t('ai.thinking')}</div></div></div></div>`);
   aiScroll();
 
   let bubble = null, badge = '';
@@ -454,7 +476,7 @@ function sendAI() {
     aiScroll();
   });
   es.addEventListener('token', e => {
-    if (!bubble) { $('#' + tid).querySelector('.text-slate-400').innerHTML = `<i class="fas fa-check-double text-emerald-400"></i> 思考完成 ${badge}`; bubble = addAIMsg(''); }
+    if (!bubble) { $('#' + tid).querySelector('.text-slate-400').innerHTML = `<i class="fas fa-check-double text-emerald-400"></i> ${t('ai.think_done')} ${badge}`; bubble = addAIMsg(''); }
     const b = $('#' + bubble); b._raw = (b._raw || '') + JSON.parse(e.data).char; b.innerHTML = fmt(b._raw); b.classList.add('cursor'); aiScroll();
   });
   es.addEventListener('card', e => { renderAICard(JSON.parse(e.data)); aiScroll(); });
@@ -532,10 +554,10 @@ function pFieldGrid(fields) {
 }
 
 // 底部 Back / Save Changes 行
-function pFooter(saveLabel = 'Save Changes') {
+function pFooter(saveLabel) {
   return `<div class="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-slate-100">
-    <button class="pf-back">Back</button>
-    <button class="btn btn-primary">${saveLabel}</button>
+    <button class="pf-back">${t('common.back')}</button>
+    <button class="btn btn-primary">${saveLabel || t('common.save')}</button>
   </div>`;
 }
 
@@ -558,7 +580,7 @@ function pDetailView(m) {
 // ② Inline Table 行编辑(行尾 ⊕ / 垃圾桶 + 顶部头字段 + 分页）
 function pInlineView(m) {
   const head = m.header_fields ? `<div class="mb-5">${pFieldGrid(m.header_fields)}</div>` : '';
-  const cols = (m.columns || []).map(c => `<th>${c}</th>`).join('') + '<th class="text-right">操作</th>';
+  const cols = (m.columns || []).map(c => `<th>${c}</th>`).join('') + `<th class="text-right">${t('common.action')}</th>`;
   const rows = (m.rows || []).map((r, idx) => `<tr>
     ${r.map((c, ci) => `<td>${ci === 0 ? c : `<span class="pf-cellinput">${esc(String(c))}</span>`}</td>`).join('')}
     <td class="text-right whitespace-nowrap">
@@ -578,15 +600,15 @@ function pInlineView(m) {
 // ③ 列表页(搜索筛选 + Download/+Add 已在 actions + 绿点状态表）
 function pListView(m) {
   const filters = (m.filters || []).map(f =>
-    `<div class="pf-cell"><label class="pf-label">${f}</label><div class="pf-select text-slate-400">全部<i class="fas fa-chevron-down text-[10px]"></i></div></div>`).join('');
+    `<div class="pf-cell"><label class="pf-label">${f}</label><div class="pf-select text-slate-400">${t('common.all')}<i class="fas fa-chevron-down text-[10px]"></i></div></div>`).join('');
   const cols = (m.columns || []).map(c => `<th>${c}</th>`).join('');
   const rows = (m.rows || []).map(r => `<tr>${r.map((c, ci) =>
     `<td>${ci === 0 ? `<span class="text-teal-600 font-medium cursor-pointer hover:underline">${esc(String(c))}</span>` : badgeCell(c)}</td>`).join('')}</tr>`).join('');
   const filterPanel = filters ? `<div class="panel p-4 mb-4">
     <div class="flex items-end gap-3 flex-wrap">
       <div class="flex-1 grid grid-cols-2 md:grid-cols-3 gap-3">${filters}</div>
-      <label class="flex items-center gap-1.5 text-sm text-slate-600 whitespace-nowrap"><span class="pf-check"></span> Active Status only</label>
-      <div class="flex gap-2"><button class="pf-back">Clear</button><button class="btn btn-primary"><i class="fas fa-magnifying-glass"></i> Search</button></div>
+      <label class="flex items-center gap-1.5 text-sm text-slate-600 whitespace-nowrap"><span class="pf-check"></span> ${t('common.active_only')}</label>
+      <div class="flex gap-2"><button class="pf-back">${t('common.clear')}</button><button class="btn btn-primary"><i class="fas fa-magnifying-glass"></i> ${t('common.search')}</button></div>
     </div></div>` : '';
   return `${filterPanel}
     <div class="panel p-1.5"><div class="table-wrap"><table class="dtable">
@@ -628,7 +650,7 @@ function pFormulaView(m) {
     ${head}
     <div class="flex items-center justify-between mb-2">
       <label class="pf-label mb-0">Eligibility Formula <span class="text-rose-500">*</span></label>
-      <button class="btn btn-ai text-xs py-1" onclick="openAI('HRStrategist','把这条假期资格规则翻译成公式')"><i class="fas fa-wand-magic-sparkles"></i> 自然语言生成公式</button>
+      <button class="btn btn-ai text-xs py-1" onclick="openAI('HRStrategist','把这条假期资格规则翻译成公式')"><i class="fas fa-wand-magic-sparkles"></i> ${S.lang === 'en' ? 'NL→Formula' : '自然语言生成公式'}</button>
     </div>
     <div class="fx-editor" id="fx-area"><pre>${esc(m.formula || "IF(HR.GENDER='M' AND HR.MARITAL='married',\n   ENTITLEMENT.DAYS + 3,\n   ENTITLEMENT.DAYS)")}</pre></div>
     <div class="fx-toolbar">${vars || '<span class="fx-var">HR.GENDER</span><span class="fx-var">HR.MARITAL</span><span class="fx-var">SERVICE.YEARS</span><span class="fx-var">IF()</span><span class="fx-var">AND</span><span class="fx-var">OR</span>'}</div>
