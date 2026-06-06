@@ -53,7 +53,7 @@ def dashboard_kpi(company_id: str = "sg"):
         "vn": [64, 58, 6, 10.0], "id": [142, 110, 21, 11.0], "hk": [42, 30, 3, 0.0], "cn": [210, 180, 28, 6.0],
     }.get(company_id, [120, 86, 12, 9.2])
     return [
-        {"label": "本月报销单", "value": base[0], "unit": "笔", "trend": "+12%", "icon": "fa-receipt", "color": "#4f46e5"},
+        {"label": "本月报销单", "value": base[0], "unit": "笔", "trend": "+12%", "icon": "fa-receipt", "color": "#20c997"},
         {"label": "已审批", "value": base[1], "unit": "笔", "trend": "+8%", "icon": "fa-circle-check", "color": "#10b981"},
         {"label": "待处理", "value": base[2], "unit": "笔", "trend": "需关注", "icon": "fa-clock", "color": "#f59e0b"},
         {"label": "适用税率", "value": base[3], "unit": "%", "trend": "本地", "icon": "fa-percent", "color": "#ec4899"},

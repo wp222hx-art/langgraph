@@ -10,7 +10,7 @@ from __future__ import annotations
 GROUPS = [
     {
         "id": "paydaes", "name": "Paydaes 集团", "name_en": "Paydaes Group",
-        "logo": "P", "color": "#4f46e5", "plan": "Enterprise",
+        "logo": "P", "color": "#20c997", "plan": "Enterprise",
         "companies": [
             {"id": "sg", "name": "新加坡公司", "name_en": "Singapore Pte Ltd", "country": "SG", "flag": "🇸🇬", "currency": "SGD", "employees": 320, "active": True},
             {"id": "my", "name": "马来西亚公司", "name_en": "Malaysia Sdn Bhd", "country": "MY", "flag": "🇲🇾", "currency": "MYR", "employees": 256, "active": True},

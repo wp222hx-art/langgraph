@@ -122,14 +122,14 @@ async function renderDashboard() {
         <div class="text-2xl mb-1">${a.emoji}</div>
         <div class="font-semibold text-sm text-slate-800">${a.name}</div>
         <div class="text-[11px] text-slate-400 mt-1 leading-snug">${a.desc}</div>
-        <div class="text-[10px] text-indigo-400 mt-2">${a.modules.length} 个模块</div>
+        <div class="text-[10px] text-teal-500 mt-2">${a.modules.length} 个模块</div>
       </div>`).join('')}
     </div>`;
   new Chart($('#dash-chart'), {
     type: 'line',
     data: { labels: d.chart.labels, datasets: d.chart.series.map((s, i) => ({
-      label: s.name, data: s.data, borderColor: i ? '#ec4899' : '#4f46e5',
-      backgroundColor: i ? 'rgba(236,72,153,.1)' : 'rgba(79,70,229,.1)', fill: true, tension: .4 })) },
+      label: s.name, data: s.data, borderColor: i ? '#ec4899' : '#20c997',
+      backgroundColor: i ? 'rgba(236,72,153,.1)' : 'rgba(32,201,151,.12)', fill: true, tension: .4 })) },
     options: { plugins: { legend: { labels: { font: { size: 11 } } } }, scales: { y: { beginAtZero: true } }, responsive: true, maintainAspectRatio: false }
   });
 }
@@ -220,7 +220,7 @@ function reportView(m) {
 }
 function drawReportChart(m) {
   new Chart($('#rpt-chart'), { type: m.chart.kind || 'bar',
-    data: { labels: m.chart.labels, datasets: m.chart.series.map(s => ({ label: s.name, data: s.data, backgroundColor: 'rgba(99,102,241,.7)', borderRadius: 6 })) },
+    data: { labels: m.chart.labels, datasets: m.chart.series.map(s => ({ label: s.name, data: s.data, backgroundColor: 'rgba(32,201,151,.75)', borderRadius: 6 })) },
     options: { plugins: { legend: { labels: { font: { size: 11 } } } }, scales: { y: { beginAtZero: true } }, responsive: true, maintainAspectRatio: false } });
 }
 
@@ -229,7 +229,7 @@ function selfClaimView(m) {
   return `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="panel p-5"><div class="text-sm text-slate-400">我的年度额度</div>
       <div class="text-3xl font-bold text-slate-900 mt-1">${b.remaining}<span class="text-base text-slate-400">/${b.annual}</span></div>
-      <div class="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-indigo-500" style="width:${b.used / b.annual * 100}%"></div></div>
+      <div class="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-[#20c997]" style="width:${b.used / b.annual * 100}%"></div></div>
       <div class="text-xs text-slate-400 mt-1.5">已用 ${b.used} · ${b.name} · ${b.level}</div>
       <button class="btn btn-ai w-full mt-4 justify-center" onclick="openAI('ClaimMate','我要拍照报销')"><i class="fas fa-camera"></i> 拍照报销(AI)</button></div>
     <div class="panel p-5 lg:col-span-2"><div class="font-semibold text-slate-800 mb-3">最近报销记录</div>
@@ -278,7 +278,7 @@ async function renderCompliance() {
         <div class="flex justify-between"><span class="text-slate-400">税率</span><span class="badge b-info">${c.tax.rate}</span></div>
         <div class="flex justify-between"><span class="text-slate-400">会计准则</span><span class="text-slate-600 text-xs">${c.accounting.standard.split(' ')[0]}</span></div>
       </div>
-      <div class="text-xs text-indigo-400 mt-3"><i class="fas fa-arrow-right"></i> 查看完整合规体系</div>
+      <div class="text-xs text-teal-500 mt-3"><i class="fas fa-arrow-right"></i> 查看完整合规体系</div>
     </div>`).join('');
   $('#view').innerHTML = `
     <div class="mb-5"><h1 class="page-title"><i class="fas fa-earth-asia text-cyan-500"></i> 全球合规中心</h1>
@@ -293,7 +293,7 @@ async function showCountry(code) {
     <div class="p-4 space-y-3 text-sm">
       <div><div class="text-xs text-slate-400 mb-1"><i class="fas fa-percent text-pink-400"></i> 税收体系</div>
         <div class="bg-slate-50 rounded-lg p-3"><b>${c.tax.name}</b> · 税率 ${c.tax.rate}<br><span class="text-slate-500 text-xs">${c.tax.authority} · ${c.tax.filing}</span></div></div>
-      <div><div class="text-xs text-slate-400 mb-1"><i class="fas fa-receipt text-indigo-400"></i> 报销规则</div>
+      <div><div class="text-xs text-slate-400 mb-1"><i class="fas fa-receipt text-teal-500"></i> 报销规则</div>
         <ul class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 space-y-1">${c.claim_rules.map(r => `<li>• ${r}</li>`).join('')}</ul></div>
       <div><div class="text-xs text-slate-400 mb-1"><i class="fas fa-book text-amber-400"></i> 做账体系</div>
         <div class="bg-slate-50 rounded-lg p-3 text-xs text-slate-600">准则:${c.accounting.standard}<br>财年:${c.accounting.fiscal}<br>科目:${c.accounting.elements.join(' / ')}</div></div>
@@ -465,13 +465,13 @@ function renderAICard(card) {
   else if (card.type === 'chart') body = `<div class="chart-box" style="height:160px"><canvas></canvas></div>`;
   else if (card.type === 'table') body = `<table class="dtable" style="font-size:11.5px">${d.headers ? `<thead><tr>${d.headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>` : ''}<tbody>${d.rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   else if (card.type === 'family') body = (d.members || []).map(m => `<div class="py-0.5"><i class="fas fa-user text-slate-300"></i> ${m.relation}: <b>${m.name}</b></div>`).join('');
-  else if (card.type === 'report') body = (d.options || []).map(o => `<div class="py-1 text-indigo-500"><i class="fas fa-file-export"></i> ${o}</div>`).join('');
+  else if (card.type === 'report') body = (d.options || []).map(o => `<div class="py-1 text-teal-600"><i class="fas fa-file-export"></i> ${o}</div>`).join('');
   else body = `<pre style="font-size:11px">${esc(JSON.stringify(d))}</pre>`;
   const cid = 'aicard' + Date.now();
   $('#ai-messages').insertAdjacentHTML('beforeend',
     `<div class="msg-ai"><span class="text-lg opacity-0">·</span><div class="ai-card" id="${cid}"><div class="ai-card-head">${card.title}</div><div class="ai-card-body">${body}</div></div></div>`);
   if (card.type === 'chart') new Chart($('#' + cid).querySelector('canvas'), {
-    type: 'bar', data: { labels: d.labels, datasets: d.series.map(s => ({ label: s.name, data: s.data, backgroundColor: 'rgba(99,102,241,.7)', borderRadius: 5 })) },
+    type: 'bar', data: { labels: d.labels, datasets: d.series.map(s => ({ label: s.name, data: s.data, backgroundColor: 'rgba(32,201,151,.75)', borderRadius: 5 })) },
     options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } }, responsive: true, maintainAspectRatio: false }
   });
 }
