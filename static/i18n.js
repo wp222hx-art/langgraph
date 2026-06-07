@@ -22,6 +22,10 @@ const I18N = {
       footer_version: 'Paydaes ClaimGPT · 集团版 V3.0',
       ai_config: 'AI 配置后台',
     },
+    core: {
+      online: '在线', agents: '智能体', active: '活跃', modules: '模块', running: '运行',
+      latency: '时延', tip_active: '运行中',
+    },
     aiconf: {
       title: 'AI 配置后台', subtitle: '统一管理 API 平台、模型与 Agent 分发 · Key 加密存储,绝不外泄前端',
       tab_basic: '① 基础配置', tab_model: '② 模型管理', tab_dispatch: '③ 分发应用',
@@ -137,6 +141,10 @@ const I18N = {
       footer_engine: 'LangGraph Orchestration', footer_agents: '5 Main + 8 Sub Agents · 18 Modules',
       footer_version: 'Paydaes ClaimGPT · Enterprise V3.0',
       ai_config: 'AI Config',
+    },
+    core: {
+      online: 'ONLINE', agents: 'Agents', active: 'active', modules: 'Modules', running: 'running',
+      latency: 'Latency', tip_active: 'running',
     },
     aiconf: {
       title: 'AI Configuration Console', subtitle: 'Manage API providers, models & agent dispatch · Keys encrypted, never exposed to frontend',

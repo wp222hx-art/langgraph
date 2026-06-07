@@ -60,10 +60,32 @@
 <!-- ═══════════ 左侧导航树 ═══════════ -->
 <aside id="sidebar" class="fixed top-14 bottom-0 left-0 w-60 bg-white border-r border-slate-200 z-30 flex flex-col transition-transform md:translate-x-0 -translate-x-full">
   <nav id="nav-tree" class="flex-1 overflow-y-auto py-3 px-2.5 space-y-0.5"></nav>
-  <div class="p-3 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed">
-    <div><i class="fas fa-bolt text-amber-400"></i> <span data-i18n="nav.footer_engine">LangGraph 编排引擎</span></div>
-    <div><i class="fas fa-layer-group text-teal-500"></i> <span data-i18n="nav.footer_agents">5主 + 8子 Agent · 18 模块</span></div>
-    <div class="mt-1 text-slate-300" data-i18n="nav.footer_version">Paydaes ClaimGPT · 集团版 V3.0</div>
+  <!-- ═══ AI 中枢状态面板(科幻活体仪表盘) ═══ -->
+  <div id="core-panel" class="core-panel">
+    <div class="core-scan"></div>
+    <!-- 顶行:引擎 + 在线状态 -->
+    <div class="core-head">
+      <span class="core-engine"><i class="fas fa-bolt"></i> <span data-i18n="nav.footer_engine">LangGraph 编排引擎</span></span>
+      <span class="core-online"><span class="core-pulse"></span><span data-i18n="core.online">在线</span></span>
+    </div>
+    <!-- 13 Agent 活跃度灯阵 -->
+    <div class="core-section">
+      <div class="core-label"><i class="fas fa-microchip"></i> <span data-i18n="core.agents">智能体</span>
+        <b id="core-agent-active">13</b>/13 <span data-i18n="core.active">活跃</span></div>
+      <div id="core-agent-grid" class="core-grid"></div>
+    </div>
+    <!-- 18 模块运行点阵 -->
+    <div class="core-section">
+      <div class="core-label"><i class="fas fa-cubes"></i> <span data-i18n="core.modules">模块</span>
+        <b id="core-mod-run">18</b>/18 <span data-i18n="core.running">运行</span></div>
+      <div id="core-mod-grid" class="core-mod-grid"></div>
+    </div>
+    <!-- 运维微指标 -->
+    <div class="core-metrics">
+      <span><i class="fas fa-wave-square"></i> <span data-i18n="core.latency">时延</span> <b id="core-lat">38ms</b></span>
+      <span><i class="fas fa-heart-pulse core-heart"></i> <b id="core-tps">12.4</b> tps</span>
+    </div>
+    <div class="core-ver" data-i18n="nav.footer_version">Paydaes ClaimGPT · 集团版 V3.0</div>
   </div>
 </aside>
 <!-- 移动端遮罩 -->

@@ -30,6 +30,54 @@ async function boot() {
   renderTopbar(); renderNav(); renderAgentTabs();
   go('dashboard');
   bindGlobal();
+  initCorePanel();                // AI 中枢状态面板(科幻活体仪表盘)
+}
+
+// ════════ AI 中枢状态面板 —— 13 Agent 灯阵 + 18 模块点阵 + 运维心跳 ════════
+const CORE_SUB = ['Intent', 'Policy', 'Risk', 'Extract', 'Workflow', 'Entitle', 'Conv', 'Audit'];
+function initCorePanel() {
+  const ag = $('#core-agent-grid');
+  if (!ag) return;
+  // 5 主 Agent(圆形·绿) + 8 子 Agent(方形·青)
+  const mains = (S.agents || []).slice(0, 5);
+  let html = '';
+  mains.forEach((a, i) => {
+    html += `<span class="core-led main on" style="--beat:${(2 + i * 0.3).toFixed(1)}s" title="${nameOf(a)} · ${t('core.tip_active')}">${a.emoji ? '' : '<i class="fas fa-robot"></i>'}</span>`;
+  });
+  CORE_SUB.forEach((s, i) => {
+    html += `<span class="core-led on" style="--beat:${(2.2 + i * 0.22).toFixed(1)}s" title="${s}Agent · ${t('core.tip_active')}"></span>`;
+  });
+  ag.innerHTML = html;
+  // 18 模块点阵
+  const mg = $('#core-mod-grid');
+  if (mg) {
+    let md = '';
+    for (let i = 0; i < 18; i++) md += `<span class="core-dot run" style="--d:${(2.4 + (i % 6) * 0.3).toFixed(1)}s"></span>`;
+    mg.innerHTML = md;
+  }
+  startCoreHeartbeat();
+}
+let _coreTimer = null;
+function startCoreHeartbeat() {
+  if (_coreTimer) clearInterval(_coreTimer);
+  const leds = $$('#core-agent-grid .core-led');
+  const dots = $$('#core-mod-grid .core-dot');
+  _coreTimer = setInterval(() => {
+    // 随机一个 Agent 闪烁(模拟被调度)
+    if (leds.length) {
+      const led = leds[Math.floor(Math.random() * leds.length)];
+      led.classList.remove('flash'); void led.offsetWidth; led.classList.add('flash');
+    }
+    // 随机 1~2 个模块切到"忙碌"黄,短暂后恢复
+    if (dots.length) {
+      const d = dots[Math.floor(Math.random() * dots.length)];
+      d.classList.add('busy');
+      setTimeout(() => d.classList.remove('busy'), 1100);
+    }
+    // 运维微指标轻微抖动(真实感)
+    const lat = $('#core-lat'); if (lat) lat.textContent = (30 + Math.floor(Math.random() * 22)) + 'ms';
+    const tps = $('#core-tps'); if (tps) tps.textContent = (9 + Math.random() * 6).toFixed(1);
+  }, 1800);
 }
 
 // ════════ 顶部栏渲染 ════════
