@@ -166,9 +166,17 @@ async function renderDashboard() {
 // ════════ 18 模块工作区 ════════
 async function renderModule(navId) {
   const m = await fetch(`/api/module/${navId}?company=${S.company.id}&lang=${S.lang}`).then(r => r.json());
-  const actions = (m.actions || []).map((a, i) =>
-    `<button class="btn ${a.includes('AI') ? 'btn-ai' : (i === 0 ? 'btn-primary' : 'btn-ghost')}" onclick="moduleAction('${a}','${m.title}')">
-      ${a.includes('AI') ? '<i class=\"fas fa-robot\"></i>' : '<i class=\"fas fa-plus\"></i>'} ${a}</button>`).join('');
+  S.curModule = m;                       // 暂存当前模块(供 CRUD 模态框读取字段定义)
+  window.__crud = m.crud || null;
+  const crudAction = m.crud ? m.crud.action : null;
+  const actions = (m.actions || []).map((a, i) => {
+    const isAI = a.includes('AI');
+    // 该 action 是这个模块的"真新增"动作 → 打开真表单模态框
+    const onclick = (crudAction && a === crudAction)
+      ? `openCrudModal()` : `moduleAction('${a}','${m.title}')`;
+    return `<button class="btn ${isAI ? 'btn-ai' : (i === 0 ? 'btn-primary' : 'btn-ghost')}" onclick="${onclick}">
+      ${isAI ? '<i class=\"fas fa-robot\"></i>' : '<i class=\"fas fa-plus\"></i>'} ${a}</button>`;
+  }).join('');
   let body = '';
   if (m.layout === 'table') body = tableView(m);
   else if (m.layout === 'approval') body = approvalView(m);
@@ -202,9 +210,28 @@ async function renderModule(navId) {
 }
 
 function tableView(m) {
+  const hasOps = m.has_record_col;       // 末列是删除句柄(__rec:N / __type:CODE / __seed)
+  const cols = m.columns || [];
+  const head = cols.map(c => `<th>${c}</th>`).join('') + (hasOps ? `<th class="text-right">${t('crud.ops')}</th>` : '');
+  const body = (m.rows || []).map(r => {
+    let handle = '', cells = r;
+    if (hasOps) { handle = r[r.length - 1]; cells = r.slice(0, -1); }
+    let opCell = '';
+    if (hasOps) {
+      if (handle && handle.startsWith('__rec:')) {
+        const rid = handle.slice(6);
+        opCell = `<td class="text-right"><button class="btn btn-ghost text-xs py-1 text-rose-500" onclick="deleteRow('rec','${rid}')"><i class="fas fa-trash"></i></button></td>`;
+      } else if (handle && handle.startsWith('__type:')) {
+        const code = handle.slice(7);
+        opCell = `<td class="text-right"><button class="btn btn-ghost text-xs py-1 text-rose-500" onclick="deleteRow('type','${code}')"><i class="fas fa-trash"></i></button></td>`;
+      } else {
+        opCell = `<td class="text-right"><span class="text-xs text-slate-300">${t('crud.seed')}</span></td>`;
+      }
+    }
+    return `<tr>${cells.map(c => `<td>${badgeCell(c)}</td>`).join('')}${opCell}</tr>`;
+  }).join('');
   return `<div class="panel p-1.5"><div class="table-wrap"><table class="dtable">
-    <thead><tr>${(m.columns || []).map(c => `<th>${c}</th>`).join('')}</tr></thead>
-    <tbody>${(m.rows || []).map(r => `<tr>${r.map(c => `<td>${badgeCell(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+    <thead><tr>${head}</tr></thead><tbody>${body}</tbody>
   </table></div></div>`;
 }
 function badgeCell(c) {
@@ -225,13 +252,19 @@ function approvalView(m) {
       <span class="badge b-mid">🟡 中风险 ${sum['中'] || 0}</span>
       <span class="badge b-high">🔴 高风险 ${sum['高'] || 0}</span>
     </div>
-    <div class="table-wrap"><table class="dtable">
-      <thead><tr>${m.columns.map(c => `<th>${c}</th>`).join('')}<th>操作</th></tr></thead>
-      <tbody>${m.rows.map(r => `<tr>${r.map(c => `<td>${badgeCell(c)}</td>`).join('')}
-        <td><button class="btn btn-ghost text-xs py-1">审批</button></td></tr>`).join('')}</tbody>
+    <div class="table-wrap" id="approval-box"><table class="dtable">
+      <thead><tr>${m.columns.map(c => `<th>${c}</th>`).join('')}<th class="text-right">${t('crud.ops')}</th></tr></thead>
+      <tbody>${m.rows.map(r => {
+        const cid = r[0];
+        return `<tr>${r.map(c => `<td>${badgeCell(c)}</td>`).join('')}
+        <td class="text-right whitespace-nowrap">
+          <button class="btn btn-ghost text-xs py-1 text-emerald-600" onclick="decideClaim('${cid}','approved')"><i class="fas fa-check"></i> ${t('crud.approve')}</button>
+          <button class="btn btn-ghost text-xs py-1 text-rose-500" onclick="decideClaim('${cid}','rejected')"><i class="fas fa-xmark"></i> ${t('crud.reject')}</button>
+        </td></tr>`; }).join('')}</tbody>
     </table></div>
+    <p class="text-[11px] text-slate-400 mt-2" id="approval-feedback"></p>
     <div class="flex gap-2 mt-4 flex-wrap">
-      <button class="btn btn-primary" style="background:#10b981" onclick="moduleAction('批量通过低风险','${m.title}')"><i class="fas fa-bolt"></i> 一键批量通过低风险</button>
+      <button class="btn btn-primary" style="background:#10b981" onclick="batchApprove()"><i class="fas fa-bolt"></i> ${t('crud.batch_low')}</button>
       <button class="btn btn-ai" onclick="openAI('ApprovalCopilot','帮我审批待审单据')"><i class="fas fa-robot"></i> AI 风险分级建议</button>
     </div></div>`;
 }
@@ -318,20 +351,189 @@ function balanceView(m) {
 }
 
 function familyView(m) {
-  return `<div class="panel p-5 max-w-2xl"><div class="font-semibold text-slate-800 mb-3">家属档案</div>
-    ${m.members.map(mem => `<div class="flex items-center gap-3 py-3 border-b border-slate-50 last:border-0">
-      <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-400"><i class="fas fa-user"></i></div>
-      <div class="flex-1"><div class="text-sm font-medium text-slate-700">${mem.name}</div><div class="text-xs text-slate-400">${mem.relation}</div></div>
-      <span class="badge b-info">可关联报销</span></div>`).join('')}
-    <button class="btn btn-ai mt-4 justify-center" onclick="openAI('ClaimMate','登记我的家属信息')"><i class="fas fa-robot"></i> 对话式登记家属</button></div>`;
+  return `<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="panel p-5"><div class="font-semibold text-slate-800 mb-3">${t('fam.archive')}</div>
+      <div id="family-list">${familyRows(m.members)}</div></div>
+    <div class="panel p-5"><div class="font-semibold text-slate-800 mb-3"><i class="fas fa-user-plus text-teal-500"></i> ${t('fam.add')}</div>
+      <div class="space-y-2">
+        <select class="ac-input" id="fam-relation">
+          <option value="配偶">${t('fam.spouse')}</option>
+          <option value="子女">${t('fam.child')}</option>
+          <option value="父母">${t('fam.parent')}</option>
+        </select>
+        <input class="ac-input" id="fam-name" placeholder="${t('fam.name')}">
+        <button class="btn btn-primary w-full justify-center" onclick="addFamily()"><i class="fas fa-plus"></i> ${t('fam.add')}</button>
+      </div>
+      <p class="text-[11px] text-slate-400 mt-2" id="fam-feedback"></p>
+      <button class="btn btn-ai w-full mt-3 justify-center" onclick="openAI('ClaimMate','登记我的家属信息')"><i class="fas fa-robot"></i> ${t('fam.ai')}</button></div></div>`;
 }
+function familyRows(members) {
+  if (!members || !members.length) return `<div class="text-sm text-slate-400 py-4 text-center">${t('fam.empty')}</div>`;
+  return members.map(mem => `<div class="flex items-center gap-3 py-3 border-b border-slate-50 last:border-0">
+    <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-slate-400"><i class="fas fa-user"></i></div>
+    <div class="flex-1"><div class="text-sm font-medium text-slate-700">${mem.name}</div><div class="text-xs text-slate-400">${mem.relation}</div></div>
+    <span class="badge b-info">${t('fam.linkable')}</span></div>`).join('');
+}
+async function addFamily() {
+  const fb = document.getElementById('fam-feedback');
+  const name = (document.getElementById('fam-name') || {}).value || '';
+  const relation = (document.getElementById('fam-relation') || {}).value || '配偶';
+  if (!name.trim()) { acFlash(fb, t('fam.need_name'), true); return; }
+  acFlash(fb, t('claim.submitting'), false);
+  try {
+    const r = await fetch('/api/family', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company: S.company.id, relation, name }) }).then(x => x.json());
+    acFlash(fb, '✅ ' + t('fam.added') + ' ' + (r.name || name), false);
+    document.getElementById('fam-name').value = '';
+    // 重新拉模块刷新列表
+    const m = await fetch(`/api/module/family?company=${S.company.id}&lang=${S.lang}`).then(x => x.json());
+    const box = document.getElementById('family-list');
+    if (box) box.innerHTML = familyRows(m.members);
+  } catch (e) { acFlash(fb, t('claim.load_err'), true); }
+}
+window.addFamily = addFamily;
 
 function moduleAction(action, title) {
-  if (action.includes('AI') || action.includes('对话') || action.includes('智能') || action.includes('NL2SQL') || action.includes('批量') || action.includes('跑批'))
-    openAI(null, action + ' · ' + title);
-  else alert(`「${action}」演示功能 · 实际系统将打开 ${title} 的操作表单`);
+  // AI/对话/批量类 → 走对话式 Agent
+  if (action.includes('AI') || action.includes('对话') || action.includes('智能') ||
+      action.includes('NL2SQL') || action.includes('跑批') || action.includes('推荐'))
+    return openAI(null, action + ' · ' + title);
+  // 当前模块有真新增能力 → 打开真表单
+  if (window.__crud) return openCrudModal();
+  // 兜底:导出/自动更新 等 → 友好提示(非阻塞 toast)
+  toast(`${action} · ${title}`);
 }
 window.moduleAction = moduleAction;
+
+// ════════ 通用真表单模态框(创建/新增 类型 · 组 · 权益 · 汇率 · 差旅…) ════════
+function openCrudModal() {
+  const crud = window.__crud;
+  if (!crud) return;
+  const fields = crud.fields || [];
+  const inputs = fields.map(f => {
+    const id = `crf-${f.key}`;
+    const req = f.required ? '<span class="text-rose-400">*</span>' : '';
+    let ctrl;
+    if (f.type === 'select') {
+      ctrl = `<select class="ac-input" id="${id}">${(f.options || []).map(o => `<option value="${o}">${o}</option>`).join('')}</select>`;
+    } else if (f.type === 'number') {
+      ctrl = `<input class="ac-input" id="${id}" type="number" step="0.01" placeholder="${f.placeholder || ''}">`;
+    } else if (f.type === 'date') {
+      ctrl = `<input class="ac-input" id="${id}" type="date">`;
+    } else {
+      ctrl = `<input class="ac-input" id="${id}" placeholder="${f.placeholder || ''}">`;
+    }
+    return `<div class="mb-2"><label class="text-xs text-slate-500 mb-1 block">${f.label}${req}</label>${ctrl}</div>`;
+  }).join('');
+  const ov = document.createElement('div');
+  ov.id = 'crud-overlay';
+  ov.className = 'crud-overlay';
+  ov.innerHTML = `<div class="crud-modal">
+    <div class="flex items-center justify-between mb-3">
+      <div class="font-semibold text-slate-800"><i class="fas fa-plus-circle text-teal-500"></i> ${crud.action}</div>
+      <button class="text-slate-400 hover:text-slate-600" onclick="closeCrudModal()"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div>${inputs}</div>
+    <p class="text-[11px] text-slate-400 my-2" id="crud-feedback"></p>
+    <div class="flex gap-2 mt-2">
+      <button class="btn btn-ghost flex-1 justify-center" onclick="closeCrudModal()">${t('crud.cancel')}</button>
+      <button class="btn btn-primary flex-1 justify-center" onclick="submitCrud()"><i class="fas fa-check"></i> ${t('crud.save')}</button>
+    </div></div>`;
+  ov.addEventListener('click', e => { if (e.target === ov) closeCrudModal(); });
+  document.body.appendChild(ov);
+}
+function closeCrudModal() { const o = document.getElementById('crud-overlay'); if (o) o.remove(); }
+
+async function submitCrud() {
+  const crud = window.__crud;
+  if (!crud) return;
+  const fb = document.getElementById('crud-feedback');
+  const vals = {};
+  for (const f of (crud.fields || [])) {
+    const el = document.getElementById(`crf-${f.key}`);
+    const v = el ? el.value.trim() : '';
+    if (f.required && !v) { acFlash(fb, `${f.label} ${t('crud.required')}`, true); return; }
+    vals[f.key] = v;
+  }
+  acFlash(fb, t('claim.submitting'), false);
+  try {
+    let r;
+    if (crud.kind === 'claim_type') {
+      // 报销类型 → 走真 claim_types 表
+      r = await fetch('/api/claim_types', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: S.company.id, code: vals.code, name: vals.name, name_en: vals.name_en || '',
+          grp: vals.grp || '日常', limit_amt: parseFloat(vals.limit_amt || '0'),
+          need_invoice: (vals.need_invoice || '是') === '是',
+        }) }).then(x => x.json());
+    } else {
+      // 其它表格模块 → 通用 module_records
+      r = await fetch('/api/module_records', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ module_id: crud.module_id, company: S.company.id, payload: vals }) }).then(x => x.json());
+    }
+    if (r.error) { acFlash(fb, r.error, true); return; }
+    acFlash(fb, '✅ ' + t('crud.saved'), false);
+    setTimeout(() => { closeCrudModal(); go(S.currentNav || crud.module_id); }, 500);
+  } catch (e) { acFlash(fb, t('claim.load_err'), true); }
+}
+
+async function deleteRow(kind, key) {
+  if (!confirm(t('crud.confirm_del'))) return;
+  try {
+    let r;
+    if (kind === 'type') {
+      r = await fetch(`/api/claim_types/${encodeURIComponent(key)}?company=${S.company.id}`, { method: 'DELETE' }).then(x => x.json());
+    } else {
+      r = await fetch(`/api/module_records/${key}?company=${S.company.id}`, { method: 'DELETE' }).then(x => x.json());
+    }
+    if (r.error) { toast(r.error, true); return; }
+    toast(t('crud.deleted'));
+    go(S.currentNav);
+  } catch (e) { toast(t('claim.load_err'), true); }
+}
+
+// ════════ 审批端真操作(接 decide API) ════════
+async function decideClaim(cid, status) {
+  const fb = document.getElementById('approval-feedback');
+  if (!cid) return;
+  if (fb) acFlash(fb, t('claim.submitting'), false);
+  try {
+    const r = await fetch(`/api/claims/${encodeURIComponent(cid)}/decide`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }).then(x => x.json());
+    if (r.error) { if (fb) acFlash(fb, r.error, true); return; }
+    const word = status === 'approved' ? t('crud.approved') : t('crud.rejected');
+    if (fb) acFlash(fb, `✅ ${cid} ${word}`, false);
+    go(S.currentNav);
+  } catch (e) { if (fb) acFlash(fb, t('claim.load_err'), true); }
+}
+async function batchApprove() {
+  const fb = document.getElementById('approval-feedback');
+  if (fb) acFlash(fb, t('claim.submitting'), false);
+  try {
+    const r = await fetch(`/api/claims/batch_decide?company=${S.company.id}&status=approved&risk_level=低`,
+      { method: 'POST' }).then(x => x.json());
+    if (fb) acFlash(fb, `✅ ${t('crud.batch_done')} ${r.affected || 0}`, false);
+    go(S.currentNav);
+  } catch (e) { if (fb) acFlash(fb, t('claim.load_err'), true); }
+}
+
+// 轻提示 toast(替代旧 alert)
+function toast(msg, isErr) {
+  const el = document.createElement('div');
+  el.className = 'ac-toast' + (isErr ? ' ac-toast-err' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.classList.add('show'), 10);
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 2600);
+}
+
+window.openCrudModal = openCrudModal;
+window.closeCrudModal = closeCrudModal;
+window.submitCrud = submitCrud;
+window.deleteRow = deleteRow;
+window.decideClaim = decideClaim;
+window.batchApprove = batchApprove;
+window.toast = toast;
 
 // ════════ 真功能联动:报销单实时刷新 + 真提交 + 发票 OCR ════════
 const STATUS_BADGE = { pending: 'b-mid', approved: 'b-low', rejected: 'b-high', paid: 'b-info' };

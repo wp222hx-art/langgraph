@@ -56,6 +56,25 @@
   - **真表单提交**:类型下拉(`/api/claim_types`)+ 金额/商户/备注 → `POST /api/claims` → 真入库 + 实时计算(风险分/可抵扣税)+ 列表自动刷新
   - **发票上传 OCR**:拖拽上传 → `POST /api/ocr` → AI 识别回填(并提示当前是真识别还是兜底)
 
+### 六、全模块真操作闭环(本次升级 · 告别演示按钮)
+对**全部前端工作台模块**做了功能审计与实操补齐,实现"打开即可用、内部可操作":
+- **Playwright 全量扫描**:20 个模块逐个打开,**零 JS 错误**,均正常渲染。
+- **报销类型(claim_type)真 CRUD**(用户点名场景):
+  - 读真实数据库 `claim_types` 表渲染(不再写死)
+  - **新增类型**:点「新增类型」→ 真表单模态框(编码/名称/英文名/分组/限额/需发票)→ `POST /api/claim_types` → 真写库 + 列表实时刷新
+  - **删除类型**:每行删除按钮 → `DELETE /api/claim_types/{code}`;**被报销单引用则拒绝删除**(数据完整性保护)
+  - 编码同公司内唯一,重复报错
+- **通用模块记录(module_records)**:报销组 / 报销权益 / 汇率 / 差旅申请 / 差旅报销 等表格模块**全部可真新增**
+  - 统一模态框按 `crud.fields` 动态生成表单 → `POST /api/module_records`(JSON payload 持久化)→ 新增行置顶显示(带删除句柄)
+  - 任意自定义行可 `DELETE /api/module_records/{id}` 删除
+- **审批端真审批**(mgr_claim / mgr_travel_req / mgr_travel_claim):
+  - 读真库 `status=pending` 待审单(不再读 mock),风险分级汇总(低/中/高)
+  - 每行「通过 / 驳回」→ `POST /api/claims/{id}/decide` → **真改状态 + 审计留痕**
+  - 「一键批量通过低风险」→ `POST /api/claims/batch_decide`
+- **家庭信息(family)真档案**:读真库 `family` 表;内联「新增家属」→ `POST /api/family` → 真写库 + 列表刷新
+- **moduleAction 重构**:废弃 `alert("演示功能")`,改为智能分流(AI 动作→对话;新增动作→真表单模态框;其余→轻提示 toast)
+- 全程 **zh/en 双语**(新增 `crud.*` / `fam.*` i18n 词条),LLM 平台/绑定配置 `force_seed` 时**完整保留**(8/8 Agent 不受影响)
+
 ## 🔌 配置后台 API 一览
 | 端点 | 方法 | 说明 |
 |---|---|---|
@@ -68,7 +87,14 @@
 | `/api/admin/bindings` | GET/POST | Agent 分发绑定 |
 | `/api/ocr` | POST | 发票识别(Vision / 规则兜底) |
 | `/api/claims` | GET/POST | 报销单列表 / 真提交 |
-| `/api/claim_types` | GET | 报销类型(表单下拉) |
+| `/api/claims/{id}/decide` | POST | 审批通过/驳回(真改状态+留痕) |
+| `/api/claims/batch_decide` | POST | 一键批量通过(按风险等级) |
+| `/api/claim_types` | GET/POST | 报销类型 列表 / **新增** |
+| `/api/claim_types/{code}` | PUT/DELETE | 报销类型 更新 / **删除(引用保护)** |
+| `/api/module_records/{id}` | GET | 某模块自定义记录列表 |
+| `/api/module_records` | POST | **通用模块真新增**(组/权益/汇率/差旅) |
+| `/api/module_records/{id}` | DELETE | 删除自定义记录 |
+| `/api/family` | POST | 新增家属(真写库) |
 
 ## 🌍 全球合规体系(东南亚 7 国)
 | 国家 | 税种 | 税率 | 会计准则 |

@@ -142,6 +142,18 @@ CREATE TABLE IF NOT EXISTS agent_bindings (
     note         TEXT,
     updated_at   TEXT
 );
+
+-- ④ 通用模块自定义记录(报销组/权益/差旅申请等表格模块的"真新增"行)
+--    用 JSON 存一行的所有列,前端按 module_id 渲染。让所有表格模块都能真实增删。
+CREATE TABLE IF NOT EXISTS module_records (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    module_id  TEXT NOT NULL,            -- claim_group / entitlement / exchange / my_travel_req ...
+    company    TEXT NOT NULL,
+    payload    TEXT NOT NULL,            -- JSON: {列名: 值, ...}
+    created_at TEXT NOT NULL,
+    created_by TEXT DEFAULT '当前用户'
+);
+CREATE INDEX IF NOT EXISTS idx_modrec ON module_records(module_id, company);
 """
 
 
@@ -320,6 +332,95 @@ def get_claim_type(code: str, company: str = "sg") -> dict | None:
         "SELECT * FROM claim_types WHERE company=? AND (name LIKE ? OR ? LIKE '%'||name||'%' "
         "OR name_en LIKE ?) LIMIT 1",
         (company, f"%{key}%", key, f"%{key}%"))
+
+
+def create_claim_type(company: str, code: str, name: str, name_en: str = "",
+                      grp: str = "日常", limit_amt: float = 0,
+                      need_invoice: bool = True) -> dict:
+    """新增报销类型(真写库)。code 在同公司内唯一。"""
+    code = (code or "").strip().upper()
+    name = (name or "").strip()
+    if not code or not name:
+        raise ValueError("编码与名称必填 / code & name required")
+    if _one("SELECT 1 FROM claim_types WHERE code=? AND company=?", (code, company)):
+        raise ValueError(f"类型编码已存在 / code exists: {code}")
+    _exec(
+        "INSERT INTO claim_types(code,company,name,name_en,grp,limit_amt,need_invoice)"
+        " VALUES(?,?,?,?,?,?,?)",
+        (code, company, name, name_en or name, grp or "日常",
+         float(limit_amt or 0), 1 if need_invoice else 0))
+    log(company, "当前用户", "新增报销类型", code, f"{name} 限额{limit_amt}")
+    return get_claim_type(code, company)
+
+
+def update_claim_type(company: str, code: str, **fields) -> dict | None:
+    """更新报销类型部分字段(name/name_en/grp/limit_amt/need_invoice)。"""
+    code = (code or "").strip().upper()
+    allowed = {"name", "name_en", "grp", "limit_amt", "need_invoice"}
+    sets, params = [], []
+    for k, v in fields.items():
+        if k in allowed and v is not None:
+            if k == "need_invoice":
+                v = 1 if v else 0
+            if k == "limit_amt":
+                v = float(v)
+            sets.append(f"{k}=?")
+            params.append(v)
+    if not sets:
+        return get_claim_type(code, company)
+    params += [code, company]
+    _exec(f"UPDATE claim_types SET {','.join(sets)} WHERE code=? AND company=?", tuple(params))
+    log(company, "当前用户", "更新报销类型", code, str(fields))
+    return get_claim_type(code, company)
+
+
+def delete_claim_type(company: str, code: str) -> bool:
+    """删除报销类型。已被报销单引用则拒绝。"""
+    code = (code or "").strip().upper()
+    used = _one("SELECT COUNT(*) AS n FROM claims WHERE company=? AND type_code=?", (company, code))
+    if used and used["n"] > 0:
+        raise ValueError(f"已有 {used['n']} 笔报销引用该类型,不可删除 / referenced by claims")
+    _exec("DELETE FROM claim_types WHERE code=? AND company=?", (code, company))
+    log(company, "当前用户", "删除报销类型", code, "")
+    return True
+
+
+# ═══════════════════════════════════════════════
+# 通用模块自定义记录(让所有表格模块都能真新增/删除)
+# ═══════════════════════════════════════════════
+def add_module_record(module_id: str, company: str, payload: dict,
+                      created_by: str = "当前用户") -> dict:
+    rid = _exec(
+        "INSERT INTO module_records(module_id,company,payload,created_at,created_by)"
+        " VALUES(?,?,?,?,?)",
+        (module_id, company, __import__("json").dumps(payload, ensure_ascii=False),
+         _now(), created_by))
+    log(company, created_by, "新增记录", module_id, str(payload)[:120])
+    return {"id": rid, "module_id": module_id, "company": company,
+            "payload": payload, "created_at": _now()}
+
+
+def list_module_records(module_id: str, company: str = "sg") -> list[dict]:
+    rows = _rows(
+        "SELECT * FROM module_records WHERE module_id=? AND company=? ORDER BY id DESC",
+        (module_id, company))
+    out = []
+    for r in rows:
+        try:
+            r["payload"] = __import__("json").loads(r["payload"])
+        except Exception:
+            r["payload"] = {}
+        out.append(r)
+    return out
+
+
+def delete_module_record(rid: int, company: str = "sg") -> bool:
+    rec = _one("SELECT * FROM module_records WHERE id=? AND company=?", (rid, company))
+    if not rec:
+        return False
+    _exec("DELETE FROM module_records WHERE id=? AND company=?", (rid, company))
+    log(company, "当前用户", "删除记录", rec["module_id"], f"#{rid}")
+    return True
 
 
 def list_claims(company: str = "sg", status: str | None = None,

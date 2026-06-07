@@ -96,6 +96,22 @@ class FamilyReq(BaseModel):
     name: str
 
 
+class ClaimTypeReq(BaseModel):
+    company: str = "sg"
+    code: str = ""
+    name: str = ""
+    name_en: str = ""
+    grp: str = "日常"
+    limit_amt: float = 0
+    need_invoice: bool = True
+
+
+class ModuleRecordReq(BaseModel):
+    module_id: str
+    company: str = "sg"
+    payload: dict = {}
+
+
 @app.get("/api/agents")
 def get_agents():
     return {"agents": AGENTS}
@@ -162,6 +178,53 @@ def chat(req: ChatReq):
 def list_claim_types(company: str = "sg"):
     """报销类型(供前端表单下拉)"""
     return {"types": db.get_claim_types(company)}
+
+
+@app.post("/api/claim_types")
+def create_claim_type(req: ClaimTypeReq):
+    """新增报销类型(真写库)"""
+    try:
+        ct = db.create_claim_type(req.company, req.code, req.name, req.name_en,
+                                  req.grp, req.limit_amt, req.need_invoice)
+        return {"ok": True, "type": ct}
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+@app.put("/api/claim_types/{code}")
+def update_claim_type(code: str, req: ClaimTypeReq):
+    """更新报销类型"""
+    ct = db.update_claim_type(req.company, code, name=req.name or None,
+                              name_en=req.name_en or None, grp=req.grp or None,
+                              limit_amt=req.limit_amt, need_invoice=req.need_invoice)
+    return {"ok": bool(ct), "type": ct}
+
+
+@app.delete("/api/claim_types/{code}")
+def delete_claim_type(code: str, company: str = "sg"):
+    """删除报销类型(被引用则拒绝)"""
+    try:
+        db.delete_claim_type(company, code)
+        return {"ok": True}
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+# ═══════ 通用模块记录 CRUD(让所有表格模块都能真新增/删除) ═══════
+@app.get("/api/module_records/{module_id}")
+def list_module_records(module_id: str, company: str = "sg"):
+    return {"records": db.list_module_records(module_id, company)}
+
+
+@app.post("/api/module_records")
+def add_module_record(req: ModuleRecordReq):
+    rec = db.add_module_record(req.module_id, req.company, req.payload)
+    return {"ok": True, "record": rec}
+
+
+@app.delete("/api/module_records/{rid}")
+def delete_module_record(rid: int, company: str = "sg"):
+    return {"ok": db.delete_module_record(rid, company)}
 
 
 @app.get("/api/claims")

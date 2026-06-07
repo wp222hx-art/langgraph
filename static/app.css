@@ -172,8 +172,18 @@ select.ac-input{ cursor:pointer; }
 .ac-toast{ position:fixed; bottom:26px; left:50%; transform:translateX(-50%); z-index:9999;
   padding:11px 20px; border-radius:11px; font-size:13.5px; color:#fff; box-shadow:0 8px 24px rgba(0,0,0,.18);
   opacity:0; transition:opacity .3s; pointer-events:none; max-width:90vw; }
+.ac-toast{ background:#0d9488; }
+.ac-toast.show{ opacity:1; }
 .ac-toast-ok{ background:#0d9488; }
 .ac-toast-err{ background:#ef4444; }
+
+/* 通用 CRUD 模态框(新增类型/组/权益/汇率/差旅…) */
+.crud-overlay{ position:fixed; inset:0; z-index:9998; background:rgba(15,23,42,.45);
+  display:flex; align-items:center; justify-content:center; padding:18px;
+  animation:fadeIn .18s ease; }
+.crud-modal{ background:#fff; border-radius:16px; width:100%; max-width:420px;
+  padding:22px; box-shadow:0 24px 64px rgba(0,0,0,.28); max-height:88vh; overflow-y:auto; }
+@keyframes fadeIn{ from{opacity:0} to{opacity:1} }
 
 /* 发票上传拖拽区(OCR 联动) */
 .ocr-drop{ display:flex; flex-direction:column; align-items:center; justify-content:center;

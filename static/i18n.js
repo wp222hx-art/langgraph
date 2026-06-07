@@ -97,6 +97,17 @@ const I18N = {
       c_id: '单号', c_type: '类型', c_amount: '金额', c_risk: '风险分', c_status: '状态', c_date: '时间',
       st_pending: '待审批', st_approved: '已批准', st_rejected: '已驳回', st_paid: '已支付',
     },
+    crud: {
+      ops: '操作', seed: '内置', save: '保存', cancel: '取消', required: '必填',
+      saved: '已保存', deleted: '已删除', confirm_del: '确定删除这一行吗?',
+      approve: '通过', reject: '驳回', approved: '已通过', rejected: '已驳回',
+      batch_low: '一键批量通过低风险', batch_done: '已批量通过笔数:',
+    },
+    fam: {
+      archive: '家属档案', add: '新增家属', name: '家属姓名', need_name: '请输入家属姓名',
+      added: '已新增家属', empty: '暂无家属', linkable: '可关联报销', ai: '对话式登记家属',
+      spouse: '配偶', child: '子女', parent: '父母',
+    },
   },
 
   // ─────────────── English(全量) ───────────────
@@ -181,6 +192,17 @@ const I18N = {
       empty: 'No claims yet', load_err: 'Load failed', total: 'Total',
       c_id: 'ID', c_type: 'Type', c_amount: 'Amount', c_risk: 'Risk', c_status: 'Status', c_date: 'Time',
       st_pending: 'Pending', st_approved: 'Approved', st_rejected: 'Rejected', st_paid: 'Paid',
+    },
+    crud: {
+      ops: 'Actions', seed: 'Built-in', save: 'Save', cancel: 'Cancel', required: 'required',
+      saved: 'Saved', deleted: 'Deleted', confirm_del: 'Delete this row?',
+      approve: 'Approve', reject: 'Reject', approved: 'approved', rejected: 'rejected',
+      batch_low: 'Batch approve low-risk', batch_done: 'Batch approved:',
+    },
+    fam: {
+      archive: 'Family Archive', add: 'Add Member', name: 'Member name', need_name: 'Please enter a name',
+      added: 'Member added', empty: 'No members', linkable: 'Claim-linkable', ai: 'Register via chat',
+      spouse: 'Spouse', child: 'Child', parent: 'Parent',
     },
   },
 
