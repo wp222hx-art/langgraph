@@ -196,6 +196,9 @@ async function renderModule(navId) {
     ${m.tabs_top ? topTabsBar(m) : ''}
     ${body}`;
   if (m.layout === 'report') drawReportChart(m);
+  // 真功能联动:自助申请/审批/数据表 渲染后实时拉真库
+  if (m.layout === 'self_claim') { loadClaimTypes(); refreshClaims('mine'); }
+  else if (m.layout === 'approval') refreshClaims('approval');
 }
 
 function tableView(m) {
@@ -270,11 +273,35 @@ function selfClaimView(m) {
     <div class="panel p-5"><div class="text-sm text-slate-400">我的年度额度</div>
       <div class="text-3xl font-bold text-slate-900 mt-1">${b.remaining}<span class="text-base text-slate-400">/${b.annual}</span></div>
       <div class="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-[#20c997]" style="width:${b.used / b.annual * 100}%"></div></div>
-      <div class="text-xs text-slate-400 mt-1.5">已用 ${b.used} · ${b.name} · ${b.level}</div>
-      <button class="btn btn-ai w-full mt-4 justify-center" onclick="openAI('ClaimMate','我要拍照报销')"><i class="fas fa-camera"></i> 拍照报销(AI)</button></div>
-    <div class="panel p-5 lg:col-span-2"><div class="font-semibold text-slate-800 mb-3">最近报销记录</div>
-      <div class="table-wrap"><table class="dtable"><thead><tr><th>单号</th><th>类型</th><th>金额</th><th>状态</th><th>日期</th></tr></thead>
-        <tbody>${m.recent.map(r => `<tr>${r.map(c => `<td>${badgeCell(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div></div>`;
+      <div class="text-xs text-slate-400 mt-1.5">${t('claim.used')} ${b.used} · ${b.name} · ${b.level}</div>
+      <button class="btn btn-ai w-full mt-4 justify-center" onclick="openAI('ClaimMate','我要拍照报销')"><i class="fas fa-camera"></i> ${t('claim.photo_ai')}</button></div>
+
+    <!-- 真提交表单 + 发票 OCR 上传 -->
+    <div class="panel p-5"><div class="font-semibold text-slate-800 mb-3"><i class="fas fa-file-invoice-dollar text-teal-500"></i> ${t('claim.new_form')}</div>
+      <label class="ocr-drop" id="ocr-drop">
+        <input type="file" accept="image/*" id="ocr-file" class="hidden" onchange="ocrUpload(event)">
+        <i class="fas fa-cloud-arrow-up text-2xl text-slate-300"></i>
+        <span class="text-xs text-slate-400 mt-1" id="ocr-hint">${t('claim.upload_invoice')}</span>
+      </label>
+      <div class="space-y-2 mt-3">
+        <select class="ac-input" id="cf-type"><option value="">${t('claim.f_type')}</option></select>
+        <input class="ac-input" id="cf-merchant" placeholder="${t('claim.f_merchant')}">
+        <div class="flex gap-2">
+          <input class="ac-input flex-1" id="cf-amount" type="number" step="0.01" placeholder="${t('claim.f_amount')}">
+          <input class="ac-input w-24" id="cf-currency" placeholder="${b.currency || 'SGD'}" value="${b.currency || 'SGD'}">
+        </div>
+        <input class="ac-input" id="cf-note" placeholder="${t('claim.f_note')}">
+        <button class="btn btn-primary w-full justify-center" onclick="submitClaim()"><i class="fas fa-paper-plane"></i> ${t('claim.submit')}</button>
+      </div>
+      <p class="text-[11px] text-slate-400 mt-2" id="cf-feedback"></p>
+    </div>
+
+    <!-- 实时报销记录(读真库) -->
+    <div class="panel p-5 lg:col-span-3"><div class="flex items-center justify-between mb-3">
+        <div class="font-semibold text-slate-800">${t('claim.recent_real')}</div>
+        <button class="btn btn-ghost text-xs py-1" onclick="refreshClaims('mine')"><i class="fas fa-rotate"></i> ${t('claim.refresh')}</button></div>
+      <div class="table-wrap" id="claims-box"><div class="text-sm text-slate-400 py-6 text-center"><i class="fas fa-spinner fa-spin"></i> ${t('common.loading')}</div></div></div>
+  </div>`;
 }
 
 function balanceView(m) {
@@ -305,6 +332,107 @@ function moduleAction(action, title) {
   else alert(`「${action}」演示功能 · 实际系统将打开 ${title} 的操作表单`);
 }
 window.moduleAction = moduleAction;
+
+// ════════ 真功能联动:报销单实时刷新 + 真提交 + 发票 OCR ════════
+const STATUS_BADGE = { pending: 'b-mid', approved: 'b-low', rejected: 'b-high', paid: 'b-info' };
+function statusText(st) { return t('claim.st_' + st) || st; }
+
+async function loadClaimTypes() {
+  const sel = document.getElementById('cf-type');
+  if (!sel) return;
+  try {
+    const types = await fetch(`/api/claim_types?company=${S.company.id}`).then(r => r.json()).then(x => x.types || []);
+    if (types.length) {
+      sel.innerHTML = `<option value="">${t('claim.f_type')}</option>` +
+        types.map(ct => `<option value="${ct.code}">${(S.lang === 'en' && ct.name_en ? ct.name_en : ct.name)} (≤${ct.limit_amt})</option>`).join('');
+    }
+  } catch (e) { /* 静默 */ }
+}
+
+async function refreshClaims(scope) {
+  const box = document.getElementById('claims-box');
+  if (!box) return;
+  try {
+    const d = await fetch(`/api/claims?company=${S.company.id}`).then(r => r.json());
+    const claims = d.claims || [];
+    if (!claims.length) { box.innerHTML = `<div class="text-sm text-slate-400 py-6 text-center">${t('claim.empty')}</div>`; return; }
+    const rows = claims.map(cl => `<tr>
+      <td class="font-mono text-xs">${cl.id}</td>
+      <td>${cl.type_name || cl.type_code}</td>
+      <td>${cl.merchant || '-'}</td>
+      <td class="font-medium">${cl.amount} ${cl.currency}</td>
+      <td><span class="badge ${cl.risk_level === '高' ? 'b-high' : cl.risk_level === '中' ? 'b-mid' : 'b-low'}">${cl.risk_score}</span></td>
+      <td><span class="badge ${STATUS_BADGE[cl.status] || 'b-info'}">${statusText(cl.status)}</span></td>
+      <td class="text-xs text-slate-400">${(cl.created_at || '').slice(0, 16)}</td>
+    </tr>`).join('');
+    const stats = d.stats || {};
+    box.innerHTML = `<table class="dtable"><thead><tr>
+        <th>${t('claim.c_id')}</th><th>${t('claim.c_type')}</th><th>${t('claim.f_merchant')}</th>
+        <th>${t('claim.c_amount')}</th><th>${t('claim.c_risk')}</th><th>${t('claim.c_status')}</th><th>${t('claim.c_date')}</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+      <div class="text-xs text-slate-400 mt-2 px-1">${t('claim.total')}: ${d.count} · ${t('claim.st_pending')}: ${stats.pending || 0} · ${t('claim.st_approved')}: ${stats.approved || 0}</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="text-sm text-rose-400 py-6 text-center">${t('claim.load_err')}</div>`;
+  }
+}
+
+async function submitClaim() {
+  const fb = document.getElementById('cf-feedback');
+  const typeCode = (document.getElementById('cf-type') || {}).value || '';
+  const amount = parseFloat((document.getElementById('cf-amount') || {}).value || '0');
+  if (!typeCode) { acFlash(fb, t('claim.need_type'), true); return; }
+  if (!amount || amount <= 0) { acFlash(fb, t('claim.need_amount'), true); return; }
+  const payload = {
+    company: S.company.id, type_code: typeCode, amount: amount,
+    merchant: (document.getElementById('cf-merchant') || {}).value || '',
+    currency: (document.getElementById('cf-currency') || {}).value || '',
+    note: (document.getElementById('cf-note') || {}).value || '',
+  };
+  acFlash(fb, t('claim.submitting'), false);
+  try {
+    const r = await fetch('/api/claims', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(x => x.json());
+    if (r.error) { acFlash(fb, r.error, true); return; }
+    const risk = r.risk || {}; const cl = r.claim || {};
+    acFlash(fb, `✅ ${t('claim.submitted')} ${cl.id} · ${t('claim.c_risk')} ${risk.score}(${risk.level}) · ${t('claim.tax')} ${r.tax_amount}`, false);
+    ['cf-merchant', 'cf-amount', 'cf-note'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    refreshClaims('mine');
+  } catch (e) { acFlash(fb, t('claim.load_err'), true); }
+}
+
+async function ocrUpload(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  const hint = document.getElementById('ocr-hint');
+  if (hint) hint.textContent = t('claim.ocr_reading');
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const b64 = String(reader.result);
+    try {
+      const r = await fetch('/api/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company: S.company.id, image_b64: b64, mime: file.type || 'image/jpeg' }) }).then(x => x.json());
+      const ext = r.extracted || {};
+      if (ext.type_code) { const s = document.getElementById('cf-type'); if (s) s.value = ext.type_code; }
+      if (ext.merchant) { const e = document.getElementById('cf-merchant'); if (e) e.value = ext.merchant; }
+      if (ext.amount) { const e = document.getElementById('cf-amount'); if (e) e.value = ext.amount; }
+      if (ext.currency) { const e = document.getElementById('cf-currency'); if (e) e.value = ext.currency; }
+      const note = (r.engine_note && (S.lang === 'en' ? r.engine_note.en : r.engine_note.zh)) || '';
+      if (hint) hint.textContent = (r.engine === 'vision' ? '✅ ' : 'ℹ️ ') + note;
+    } catch (e) { if (hint) hint.textContent = t('claim.ocr_err'); }
+  };
+  reader.readAsDataURL(file);
+}
+
+// 通用反馈(复用 ac-toast 风格的轻提示)
+function acFlash(el, msg, isErr) {
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isErr ? '#ef4444' : '#10b981';
+}
+
+window.loadClaimTypes = loadClaimTypes;
+window.refreshClaims = refreshClaims;
+window.submitClaim = submitClaim;
+window.ocrUpload = ocrUpload;
 
 // ════════ 东南亚多国合规中心 ════════
 async function renderCompliance() {

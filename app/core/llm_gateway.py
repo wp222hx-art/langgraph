@@ -208,17 +208,100 @@ def chat_json(cfg: dict, system: str, user: str, temperature: float = 0.1) -> di
     """要求模型返回 JSON 并解析。失败抛 GatewayError。"""
     msgs = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     txt = chat(cfg, msgs, temperature=temperature, json_mode=True, max_tokens=512)
-    txt = txt.strip()
-    # 容错:去掉可能的 ```json 包裹
+    return _parse_json(txt)
+
+
+def _parse_json(txt: str) -> dict:
+    """从模型回复中稳健解析 JSON(去 ```json 包裹 / 截取第一个 {...})。"""
+    txt = (txt or "").strip()
     if txt.startswith("```"):
         txt = txt.split("```")[1] if "```" in txt[3:] else txt.strip("`")
         txt = txt.replace("json", "", 1).strip() if txt.lower().startswith("json") else txt
     try:
         return json.loads(txt)
     except Exception:
-        # 尝试截取第一个 {...}
         import re
         m = re.search(r"\{.*\}", txt, re.S)
         if m:
             return json.loads(m.group(0))
         raise GatewayError(f"返回非合法 JSON: {txt[:120]}")
+
+
+# ═══════════════════════════════════════════════
+# 4) 多模态发票识别(Vision OCR)
+# ═══════════════════════════════════════════════
+_OCR_SYS = (
+    "你是专业的发票/票据 OCR 识别引擎。仔细阅读图片中的发票或收据,"
+    "提取关键字段并只输出 JSON,不要任何解释文字。\n"
+    'JSON 格式:{"merchant":"商户名称","category":"费用类别(餐饮/交通/住宿/办公/差旅/其他)",'
+    '"amount":数字金额,"currency":"币种代码如CNY/SGD/USD","date":"YYYY-MM-DD",'
+    '"tax_no":"发票号或税号(无则空字符串)"}\n'
+    "金额只填数字(不带符号);识别不到的字段填空字符串或0。"
+)
+
+
+def vision_ocr(cfg: dict, image_b64: str, mime: str = "image/jpeg") -> dict:
+    """
+    多模态识票:传入 base64 图片(不含 data: 前缀),返回结构化票据 dict。
+    cfg 来自 db.resolve_binding():{kind, base_url, api_key, model_id}
+    失败抛 GatewayError(上层回退到 NL 抽取 / 示例 OCR)。
+    """
+    kind = cfg.get("kind", "openai_compatible")
+    base_url = _norm_base(cfg.get("base_url", ""))
+    api_key = cfg.get("api_key", "")
+    model = cfg.get("model_id")
+    if not api_key or not model:
+        raise GatewayError("未配置可用的 Key 或模型")
+    # 去掉可能携带的 data:image/...;base64, 前缀
+    if "," in image_b64 and image_b64.strip().startswith("data:"):
+        image_b64 = image_b64.split(",", 1)[1]
+
+    try:
+        if kind == "anthropic":
+            payload = {
+                "model": model, "max_tokens": 512,
+                "system": _OCR_SYS,
+                "messages": [{"role": "user", "content": [
+                    {"type": "image", "source": {"type": "base64",
+                                                  "media_type": mime, "data": image_b64}},
+                    {"type": "text", "text": "识别这张票据,只输出 JSON。"},
+                ]}],
+            }
+            r = httpx.post(
+                f"{base_url}/v1/messages",
+                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json=payload, timeout=_TIMEOUT,
+            )
+            if r.status_code not in (200, 201):
+                raise GatewayError(f"Claude Vision 失败 HTTP {r.status_code}: {r.text[:160]}")
+            data = r.json()
+            parts = data.get("content", [])
+            txt = "".join(p.get("text", "") for p in parts if p.get("type") == "text")
+        else:
+            payload = {
+                "model": model, "max_tokens": 512, "temperature": 0.1,
+                "messages": [
+                    {"role": "system", "content": _OCR_SYS},
+                    {"role": "user", "content": [
+                        {"type": "text", "text": "识别这张票据,只输出 JSON。"},
+                        {"type": "image_url",
+                         "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
+                    ]},
+                ],
+            }
+            r = httpx.post(
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}",
+                         "Content-Type": "application/json"},
+                json=payload, timeout=_TIMEOUT,
+            )
+            if r.status_code != 200:
+                raise GatewayError(f"Vision 调用失败 HTTP {r.status_code}: {r.text[:160]}")
+            data = r.json()
+            txt = data["choices"][0]["message"]["content"]
+        return _parse_json(txt)
+    except GatewayError:
+        raise
+    except Exception as e:
+        raise GatewayError(f"Vision OCR 异常: {e}")

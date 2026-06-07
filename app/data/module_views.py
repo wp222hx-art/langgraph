@@ -62,7 +62,7 @@ def get_module_view(module_id: str, company: str = "sg") -> dict:
         # ── 我的 ──
         "my_claim": {
             "title": "报销申请 · 自助", "desc": "余额摘要、动态字段、附件上传、家属选择、草稿存取", "layout": "self_claim",
-            "balance": mock_db.get_balance("E001"),
+            "balance": {**mock_db.get_balance("E001"), "currency": cur},
             "recent": [
                 ["C20260601", "餐饮费", f"186 {cur}", "审批中", "2026-06-01"],
                 ["C20260598", "交通费", f"88 {cur}", "已支付", "2026-05-28"],

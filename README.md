@@ -46,6 +46,30 @@
   - **分发真正生效**:`intent_agent` / `policy_agent` / `conversation_agent` 接入网关
   - **优雅降级**:**有绑定走 LLM,无绑定 / 调用失败自动回退内置规则引擎**(零回归,系统永不挂)
 
+### 五、OCR Vision 识票 + 前端真功能闭环
+- **多模态识票**(`llm_gateway.vision_ocr`):为 `_ocr` 节点分发视觉模型(如 GPT-4o / Claude Sonnet)后,**上传发票照片即真识别**
+  - 双协议传图:openai_compatible(`image_url` data URI)/ anthropic(`image` base64 source)
+  - 输出结构化字段(商户/类别/金额/币种/日期/税号)自动回填表单
+  - **三级降级**:有图+有 Vision → 真识别(`vision`);无 Vision → NL 规则解析(`nl`);兜底示例(`sample`)
+- **前端真功能闭环**(自助报销页 `my_claim`):
+  - **实时报销记录**:读 `/api/claims` 真库,彩色风险徽章 + 状态 + 统计,一键刷新
+  - **真表单提交**:类型下拉(`/api/claim_types`)+ 金额/商户/备注 → `POST /api/claims` → 真入库 + 实时计算(风险分/可抵扣税)+ 列表自动刷新
+  - **发票上传 OCR**:拖拽上传 → `POST /api/ocr` → AI 识别回填(并提示当前是真识别还是兜底)
+
+## 🔌 配置后台 API 一览
+| 端点 | 方法 | 说明 |
+|---|---|---|
+| `/api/admin/presets` | GET | 预置平台 + 可分发 Agent 清单 |
+| `/api/admin/providers` | GET/POST | 平台列表 / 新增平台(Key 加密) |
+| `/api/admin/providers/{pid}/verify` | POST | 验证 Key(并自动拉模型) |
+| `/api/admin/providers/{pid}/activate` | POST | 激活 / 停用平台 |
+| `/api/admin/providers/{pid}/models/pull` | POST | 拉取平台全部模型 |
+| `/api/admin/models/toggle` | POST | 模型启用 / 停用 |
+| `/api/admin/bindings` | GET/POST | Agent 分发绑定 |
+| `/api/ocr` | POST | 发票识别(Vision / 规则兜底) |
+| `/api/claims` | GET/POST | 报销单列表 / 真提交 |
+| `/api/claim_types` | GET | 报销类型(表单下拉) |
+
 ## 🌍 全球合规体系(东南亚 7 国)
 | 国家 | 税种 | 税率 | 会计准则 |
 |------|------|------|---------|

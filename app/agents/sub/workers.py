@@ -93,10 +93,41 @@ def intent_agent(text: str) -> dict[str, Any]:
 
 # ─────────────────────────────────────────────
 # ② ExtractionAgent — 多模态 OCR / 自然语言抽取
-# 阶段A: 从自然语言真抽金额 + 本地分类(查真表限额)
-# 阶段B: 接入 Vision LLM 后,有图走 OCR,无图走本函数兑底
+# 有图 + _ocr 已分发 Vision 模型 → 走真照片识票
+# 否则 → 自然语言真抽金额 + 本地分类(查真表限额) / 示例 OCR 兜底
 # ─────────────────────────────────────────────
-def extraction_agent(text: str, company: str = "sg") -> dict[str, Any]:
+def _vision_extract(image_b64: str, mime: str, company: str) -> dict | None:
+    """有图且 _ocr 已分发多模态模型时,走真 Vision 识票;否则返回 None。"""
+    cfg = _llm_cfg("_ocr")
+    if not (cfg and image_b64):
+        return None
+    try:
+        r = llm_gateway.vision_ocr(cfg, image_b64, mime=mime)
+        cur = r.get("currency") or db.COMPANY_CURRENCY.get(company, "CNY")
+        ct = db.get_claim_type(r.get("category", ""), company)
+        try:
+            amount = float(r.get("amount") or 0)
+        except (TypeError, ValueError):
+            amount = 0.0
+        return {
+            "merchant": r.get("merchant", "") or (ct["name"] if ct else "票据"),
+            "category": (ct["name"] if ct else (r.get("category") or "其他")),
+            "type_code": ct["code"] if ct else "",
+            "amount": amount, "currency": cur,
+            "date": r.get("date", "") or "", "tax_no": r.get("tax_no", "") or "",
+            "engine": "vision",
+        }
+    except Exception:
+        return None  # Vision 失败 → 上层 NL/示例兜底
+
+
+def extraction_agent(text: str, company: str = "sg",
+                     image_b64: str = "", mime: str = "image/jpeg") -> dict[str, Any]:
+    # ① 有图 + 已分发 Vision → 真识票
+    v = _vision_extract(image_b64, mime, company)
+    if v:
+        return {"extracted": v}
+    # ② 自然语言真抽金额 + 本地分类
     amt = calc.parse_amount(text)
     ctype = calc.guess_type(text, company)
     cur = db.COMPANY_CURRENCY.get(company, "CNY")
@@ -105,16 +136,17 @@ def extraction_agent(text: str, company: str = "sg") -> dict[str, Any]:
             "merchant": _guess_merchant(text) or ctype["name"],
             "category": ctype["name"], "type_code": ctype["code"],
             "amount": amt if amt is not None else 0.0,
-            "currency": cur, "date": "", "tax_no": "",
+            "currency": cur, "date": "", "tax_no": "", "engine": "nl",
         }
     else:
-        # 未能本地分类:退回示例 OCR(阶段B Vision LLM 会替代)
+        # ③ 未能本地分类:退回示例 OCR
         ocr = mock_db.mock_ocr_invoice()
         ct = db.get_claim_type(ocr.get("category", ""), company)
         ocr["type_code"] = ct["code"] if ct else ""
         ocr["currency"] = cur
         if amt is not None:
             ocr["amount"] = amt
+        ocr["engine"] = "sample"
         extracted = ocr
     return {"extracted": extracted}
 

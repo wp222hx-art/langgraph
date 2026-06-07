@@ -174,3 +174,10 @@ select.ac-input{ cursor:pointer; }
   opacity:0; transition:opacity .3s; pointer-events:none; max-width:90vw; }
 .ac-toast-ok{ background:#0d9488; }
 .ac-toast-err{ background:#ef4444; }
+
+/* 发票上传拖拽区(OCR 联动) */
+.ocr-drop{ display:flex; flex-direction:column; align-items:center; justify-content:center;
+  border:2px dashed #cbd5e1; border-radius:12px; padding:18px 12px; cursor:pointer;
+  transition:all .2s; text-align:center; background:#f8fafc; }
+.ocr-drop:hover{ border-color:#20c997; background:#f0fdfa; }
+.hidden{ display:none; }

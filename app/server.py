@@ -78,6 +78,12 @@ class ClaimReq(BaseModel):
     emp_id: str = ""
 
 
+class OcrReq(BaseModel):
+    company: str = "sg"
+    image_b64: str          # base64(可含 data: 前缀)
+    mime: str = "image/jpeg"
+
+
 class DecideReq(BaseModel):
     status: str            # approved / rejected / paid
     approver: str = "审批副驾"
@@ -152,6 +158,12 @@ def chat(req: ChatReq):
 
 
 # ═══════ 真实报销单 CRUD(SQLite 持久化) ═══════
+@app.get("/api/claim_types")
+def list_claim_types(company: str = "sg"):
+    """报销类型(供前端表单下拉)"""
+    return {"types": db.get_claim_types(company)}
+
+
 @app.get("/api/claims")
 def list_claims(company: str = "sg", status: str | None = None, emp_id: str | None = None):
     """真实报销单列表(来自数据库)"""
@@ -187,6 +199,25 @@ def create_claim(req: ClaimReq):
     })
     return {"claim": saved, "validation": val, "risk": risk,
             "tax_amount": tax, "amount_base": base}
+
+
+@app.post("/api/ocr")
+def ocr_invoice(req: OcrReq):
+    """发票识别:有图 + _ocr 已分发 Vision 模型 → 真识票;否则 NL/示例兜底。
+    返回结构化字段供前端回填表单(merchant/category/type_code/amount/currency/date/tax_no/engine)。"""
+    from app.agents.sub import workers
+    res = workers.extraction_agent("", company=req.company,
+                                   image_b64=req.image_b64, mime=req.mime)
+    ext = res.get("extracted", {})
+    engine = ext.get("engine", "sample")
+    # 引擎说明(供前端提示用户当前是真识别还是兜底)
+    note_map = {
+        "vision": {"zh": "AI 视觉模型已识别票据", "en": "Recognized by AI vision model"},
+        "nl": {"zh": "未分发视觉模型,按规则解析", "en": "No vision model bound, parsed by rules"},
+        "sample": {"zh": "未分发视觉模型,返回示例数据", "en": "No vision model bound, sample data"},
+    }
+    return {"extracted": ext, "engine": engine,
+            "engine_note": note_map.get(engine, note_map["sample"])}
 
 
 @app.post("/api/claims/{claim_id}/decide")

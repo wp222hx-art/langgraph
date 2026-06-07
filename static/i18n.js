@@ -85,6 +85,18 @@ const I18N = {
     role: {
       switch_title: '切换角色(体验不同权限)',
     },
+    claim: {
+      my_quota: '我的年度额度', used: '已用', photo_ai: '拍照报销(AI)',
+      new_form: '新建报销单', upload_invoice: '上传发票图片 · AI 自动识别回填',
+      ocr_reading: 'AI 正在识别票据…', ocr_err: '识别失败,请手动填写',
+      f_type: '请选择报销类型', f_merchant: '商户名称', f_amount: '金额', f_note: '备注说明',
+      submit: '提交报销单', submitting: '提交中…', submitted: '已生成单据',
+      need_type: '请先选择报销类型', need_amount: '请输入有效金额',
+      tax: '可抵扣税', recent_real: '实时报销记录(真实数据库)', refresh: '刷新',
+      empty: '暂无报销记录', load_err: '加载失败', total: '合计',
+      c_id: '单号', c_type: '类型', c_amount: '金额', c_risk: '风险分', c_status: '状态', c_date: '时间',
+      st_pending: '待审批', st_approved: '已批准', st_rejected: '已驳回', st_paid: '已支付',
+    },
   },
 
   // ─────────────── English(全量) ───────────────
@@ -157,6 +169,18 @@ const I18N = {
     },
     role: {
       switch_title: 'Switch Role (try different permissions)',
+    },
+    claim: {
+      my_quota: 'My Annual Quota', used: 'Used', photo_ai: 'Snap & Claim (AI)',
+      new_form: 'New Claim', upload_invoice: 'Upload invoice · AI auto-fill',
+      ocr_reading: 'AI reading invoice…', ocr_err: 'Recognition failed, please fill manually',
+      f_type: 'Select claim type', f_merchant: 'Merchant', f_amount: 'Amount', f_note: 'Note',
+      submit: 'Submit Claim', submitting: 'Submitting…', submitted: 'Created',
+      need_type: 'Please select a claim type', need_amount: 'Enter a valid amount',
+      tax: 'Deductible Tax', recent_real: 'Live Claims (Real Database)', refresh: 'Refresh',
+      empty: 'No claims yet', load_err: 'Load failed', total: 'Total',
+      c_id: 'ID', c_type: 'Type', c_amount: 'Amount', c_risk: 'Risk', c_status: 'Status', c_date: 'Time',
+      st_pending: 'Pending', st_approved: 'Approved', st_rejected: 'Rejected', st_paid: 'Paid',
     },
   },
 
