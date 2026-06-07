@@ -1,12 +1,12 @@
 """
 LLM Gateway —— 多平台统一调用网关
-把 TokenHost.cn / DeepSeek / Claude 等平台抽象成一致接口:
+把 TokenHot.cn / DeepSeek / Claude 等平台抽象成一致接口:
   - verify_key()  验证 Key 是否有效(并顺带能拉到模型)
   - list_models() 拉取平台支持的模型列表
   - chat()        统一聊天调用(自动适配 OpenAI 兼容 / Anthropic 协议)
 
 协议适配:
-  - kind == "openai_compatible": TokenHost / DeepSeek / OpenAI / 通义 / Kimi 等
+  - kind == "openai_compatible": TokenHot / DeepSeek / OpenAI / 通义 / Kimi 等
         Authorization: Bearer <key>
         POST {base}/chat/completions     GET {base}/models
   - kind == "anthropic": Claude 官方
@@ -24,10 +24,10 @@ import httpx
 
 # ── 内置平台预设(前端"基础配置"下拉直接选) ──
 PROVIDER_PRESETS = {
-    "tokenhost": {
-        "name": "TokenHost.cn", "kind": "openai_compatible",
-        "base_url": "https://api.tokenhost.cn/v1",
-        "name_en": "TokenHost.cn",
+    "tokenhot": {
+        "name": "TokenHot.cn", "kind": "openai_compatible",
+        "base_url": "https://api.tokenhot.cn/v1",
+        "name_en": "TokenHot.cn",
     },
     "deepseek": {
         "name": "DeepSeek", "kind": "openai_compatible",

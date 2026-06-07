@@ -290,7 +290,7 @@ BINDABLE_AGENTS = [
 
 class ProviderReq(BaseModel):
     id: str = ""               # 留空则用 preset / 自定义
-    preset: str = ""           # tokenhost / deepseek / claude / openai
+    preset: str = ""           # tokenhot / deepseek / claude / openai
     name: str = ""
     kind: str = "openai_compatible"
     base_url: str = ""

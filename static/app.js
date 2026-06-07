@@ -920,7 +920,7 @@ function acRenderBasic(body) {
           <option value="">${tt('custom')}</option>${presetOpts}
         </select>
         <label class="text-xs text-slate-500 mt-2 block">${tt('provider_name')}</label>
-        <input id="ac-name" class="ac-input" placeholder="DeepSeek / TokenHost ...">
+        <input id="ac-name" class="ac-input" placeholder="DeepSeek / TokenHot ...">
         <label class="text-xs text-slate-500 mt-2 block">${tt('kind')}</label>
         <select id="ac-kind" class="ac-input">
           <option value="openai_compatible">openai_compatible</option>

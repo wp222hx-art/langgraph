@@ -38,7 +38,7 @@
 - **全面中英文 i18n**:`t(key)` 点路径查找,`data-i18n` DOM 扫描,localStorage 记忆语言
 
 ### 四、AI 配置后台(统一管理 API · 模型 · Agent 分发)
-- **基础配置**:接入 TokenHost.cn / DeepSeek / Claude(Anthropic) / OpenAI,Key **提交 → 验证 → 激活** 三段式
+- **基础配置**:接入 TokenHot.cn / DeepSeek / Claude(Anthropic) / OpenAI,Key **提交 → 验证 → 激活** 三段式
   - 双协议网关(`app/core/llm_gateway.py`):`openai_compatible`(Bearer)+ `anthropic`(x-api-key)
   - **Key 加密存储**:XOR + sha256 + base64,**绝不外泄前端**(前端只见 `key_tail` 后 4 位、不进 git)
 - **模型管理**:一键拉取平台支持的全部模型接口,逐模型认定(启用 / 停用)+ 能力自动识别

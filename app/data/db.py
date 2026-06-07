@@ -106,9 +106,9 @@ CREATE INDEX IF NOT EXISTS idx_claims_company ON claims(company);
 CREATE INDEX IF NOT EXISTS idx_claims_status  ON claims(company, status);
 CREATE INDEX IF NOT EXISTS idx_claims_emp     ON claims(emp_id);
 
--- ① LLM 平台配置(TokenHost / DeepSeek / Claude ...)
+-- ① LLM 平台配置(TokenHot / DeepSeek / Claude ...)
 CREATE TABLE IF NOT EXISTS llm_providers (
-    id          TEXT PRIMARY KEY,        -- tokenhost / deepseek / claude / custom-xxx
+    id          TEXT PRIMARY KEY,        -- tokenhot / deepseek / claude / custom-xxx
     name        TEXT NOT NULL,           -- 显示名
     kind        TEXT NOT NULL,           -- openai_compatible / anthropic
     base_url    TEXT NOT NULL,           -- API 基址
