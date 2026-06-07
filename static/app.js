@@ -90,38 +90,51 @@ function startCoreHeartbeat() {
       const byId = {};
       real.agents.forEach(a => { byId[a.id] = a; });
       let activeCount = 0;
+      real.agents.forEach(a => { if (a.recent) activeCount++; });
+      const hasTraffic = activeCount > 0;
+
       ledIds.forEach((id, i) => {
         const led = leds[i];
         if (!led || !id) return;
         const a = byId[id];
         if (a && a.recent) {
-          activeCount++;
-          // 仅当本轮 since_ms 比上次更"新鲜"(说明刚被命中)才爆闪,常亮态保持
+          // 真实命中 → 灯爆闪 + 常亮
           const prev = _coreLastSince[id];
           const fresh = (prev == null) || (a.since_ms != null && a.since_ms < (prev - 200)) || (a.since_ms != null && a.since_ms < 1600);
           led.classList.add('on');
           if (fresh) { led.classList.remove('flash'); void led.offsetWidth; led.classList.add('flash'); }
-        } else {
+        } else if (hasTraffic) {
+          // 有流量时:未命中的灯暗下去,凸显真实调用路径
           led.classList.remove('on');
+        } else {
+          // 待机态(无任何流量):全部 LED 保持微亮呼吸,营造「系统在线待命」活体感
+          led.classList.add('on');
         }
         if (a) _coreLastSince[id] = a.since_ms;
       });
+
       // 真实指标
       const lat = $('#core-lat');
       if (lat) lat.textContent = (real.avg_latency_ms != null ? real.avg_latency_ms : '–') + 'ms';
       const tps = $('#core-tps');
       if (tps) tps.textContent = (real.tps != null ? real.tps : 0).toFixed(1);
       const act = $('#core-agent-active');
-      if (act) act.textContent = activeCount;
-      // 模块点阵:有活跃 Agent 时点亮对应数量的"忙碌"点,呼应真实负载
+      if (act) act.textContent = hasTraffic ? activeCount : 13;  // 待机显示满编 13
+
+      // 模块点阵:有真实负载时点亮对应数量「忙碌」点;待机时全部常态运行
       if (dots.length) {
-        const busyN = Math.min(dots.length, activeCount * 2);
-        dots.forEach((d, i) => d.classList.toggle('busy', i < busyN));
+        if (hasTraffic) {
+          const busyN = Math.min(dots.length, activeCount * 2);
+          dots.forEach((d, i) => d.classList.toggle('busy', i < busyN));
+        } else {
+          dots.forEach(d => d.classList.remove('busy'));
+        }
       }
-      // 完全无真实流量时,偶尔来一次温和待机脉冲,避免死气沉沉
-      if (activeCount === 0) {
+
+      // 待机态偶尔来一次温和扫描脉冲,避免死气沉沉
+      if (!hasTraffic) {
         _idleTick++;
-        if (_idleTick % 3 === 0 && leds.length) {
+        if (_idleTick % 2 === 0 && leds.length) {
           const led = leds[Math.floor(Math.random() * leds.length)];
           led.classList.remove('flash'); void led.offsetWidth; led.classList.add('flash');
         }
@@ -1526,3 +1539,4 @@ window.acSubmitProvider = acSubmitProvider; window.acVerify = acVerify;
 window.acActivate = acActivate; window.acPull = acPull; window.acDelProvider = acDelProvider;
 window.acFilterModels = acFilterModels; window.acToggleModel = acToggleModel;
 window.acBindProvChange = acBindProvChange; window.acSaveBinding = acSaveBinding;
+

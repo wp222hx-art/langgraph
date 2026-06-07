@@ -195,11 +195,12 @@ select.ac-input{ cursor:pointer; }
 /* ═══════════ AI 中枢状态面板(科幻活体仪表盘) ═══════════ */
 .core-panel{
   position:relative; margin:8px; padding:11px 12px 10px; border-radius:12px;
-  background:linear-gradient(160deg,#0b1f1d 0%,#0a2a26 55%,#08201d 100%);
-  border:1px solid rgba(43,217,194,.22);
+  background:linear-gradient(160deg,#0b1f1d 0%,#0a2a26 55%,#08201d 100%) !important;
+  background-color:#0a2420 !important;
+  border:1px solid rgba(43,217,194,.22) !important;
   box-shadow:0 0 0 1px rgba(43,217,194,.06), 0 8px 24px -10px rgba(0,0,0,.5),
              inset 0 1px 0 rgba(43,217,194,.10);
-  overflow:hidden; font-size:11px; color:#7fd9cb;
+  overflow:hidden; font-size:11px; color:#7fd9cb !important;
 }
 /* 顶部缓慢扫描光带 */
 .core-scan{ position:absolute; left:0; right:0; top:-40%; height:40%;
@@ -229,28 +230,28 @@ select.ac-input{ cursor:pointer; }
 /* 13 Agent 灯阵(5主突出 + 8子) */
 .core-grid{ display:flex; flex-wrap:wrap; gap:4px; }
 .core-led{ width:13px; height:13px; border-radius:4px; position:relative;
-  background:rgba(43,217,194,.12); border:1px solid rgba(43,217,194,.25);
+  background:rgba(43,217,194,.12) !important; border:1px solid rgba(43,217,194,.25);
   display:flex; align-items:center; justify-content:center; cursor:default;
   transition:transform .15s; }
 .core-led:hover{ transform:scale(1.25); z-index:3; }
 .core-led.main{ border-radius:50%; }
 .core-led i{ font-size:6px; color:#0a2a26; }
-.core-led.on{ background:#2BD9C2; border-color:#5ee9d6;
+.core-led.on{ background:#2BD9C2 !important; border-color:#5ee9d6;
   box-shadow:0 0 6px rgba(43,217,194,.8), inset 0 0 3px rgba(255,255,255,.5);
   animation:ledBeat var(--beat,2.4s) ease-in-out infinite; }
-.core-led.main.on{ background:#34d399; border-color:#6ee7b7; box-shadow:0 0 8px rgba(52,211,153,.9); }
+.core-led.main.on{ background:#34d399 !important; border-color:#6ee7b7; box-shadow:0 0 8px rgba(52,211,153,.9); }
 @keyframes ledBeat{ 0%,100%{opacity:.55} 50%{opacity:1} }
 .core-led.flash{ animation:ledFlash .6s ease; }
 @keyframes ledFlash{ 0%{transform:scale(1)} 40%{transform:scale(1.5); box-shadow:0 0 12px rgba(94,233,214,1)} 100%{transform:scale(1)} }
 
 /* 18 模块运行点阵 */
 .core-mod-grid{ display:grid; grid-template-columns:repeat(9,1fr); gap:3px; }
-.core-dot{ height:5px; border-radius:2px; background:rgba(43,217,194,.15);
+.core-dot{ height:5px; border-radius:2px; background:rgba(43,217,194,.15) !important;
   border:1px solid rgba(43,217,194,.2); transition:all .2s; }
-.core-dot.run{ background:#2BD9C2; box-shadow:0 0 4px rgba(43,217,194,.7);
+.core-dot.run{ background:#2BD9C2 !important; box-shadow:0 0 4px rgba(43,217,194,.7);
   animation:dotRun var(--d,3s) ease-in-out infinite; }
 @keyframes dotRun{ 0%,100%{opacity:.35} 50%{opacity:1} }
-.core-dot.busy{ background:#fbbf24; box-shadow:0 0 5px rgba(251,191,36,.8); }
+.core-dot.busy{ background:#fbbf24 !important; box-shadow:0 0 5px rgba(251,191,36,.8); }
 
 /* 运维微指标 */
 .core-metrics{ position:relative; z-index:1; display:flex; justify-content:space-between;
