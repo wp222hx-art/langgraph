@@ -75,6 +75,20 @@
 - **moduleAction 重构**:废弃 `alert("演示功能")`,改为智能分流(AI 动作→对话;新增动作→真表单模态框;其余→轻提示 toast)
 - 全程 **zh/en 双语**(新增 `crud.*` / `fam.*` i18n 词条),LLM 平台/绑定配置 `force_seed` 时**完整保留**(8/8 Agent 不受影响)
 
+### 七、AI 权限贯穿层(本次升级 · 让 AI 成为身份判定者)
+把"权限"从静态菜单过滤,升级为**贯穿全系统的【身份判定 + 操作裁决】**——这是猫哥点名的核心架构:
+- **操作级能力矩阵**(`app/core/permissions.py`):细到 16 个具体写操作(`claim.approve` / `balance.adjust` / `claim_type.create` / `report.export` …),`ROLE_ACTIONS` 为 6 角色各配一组能力,**`sys_admin = {"*"}` 最高权限可处理一切(含审批裁决)**。
+- **三层防护,处处兜底**:
+  1. **后端写操作闸门**:每个 mutating 端点先 `permissions.can(role, action)`,越权返回 `deny_payload`(含"谁可以做"引导)。
+  2. **Agent handler 硬拦截**:无审批权角色让 AI 代办审批,**写库前即拦截、绝不落库**(`approval_copilot` batch 分支)。
+  3. **AI 身份注入(贯穿核心)**:`role` 从前端 → API → `run_turn` → `ClaimState` → `conversation_agent`,把 `permissions.describe(role)` 身份画像注入 LLM 系统提示。**AI 全程"知道登录者是谁、能做什么",在对话中主动拒绝越权请求**(如普通员工让 AI 帮他审批 → AI 礼貌拒绝并告知应由审批人/HR/系统管理员处理)。
+- **前端权限自适应**:`/api/whoami` 驱动越权按钮隐藏(余额调整面板、报表导出按钮按角色显隐),后端 403 时 toast 兜底提示。
+
+### 八、三项功能接真(本次升级)
+- **余额调整接真 API + 必填原因留痕**:`balance_adj` 工作台真表单(员工选择 / 增·减·转移 / 金额 / **必填原因**)→ `POST /api/balance/adjust` → 真改员工 `annual_quota` + 写 `balance_adjust` 流水表(全程审计留痕);`GET /api/balance/history` 真历史。**仅 finance / sys_admin 可调**。
+- **报表导出 PPT / Excel 接真生成**(`app/core/reporting.py`):`openpyxl` 生成真 `.xlsx`(报销明细 + 状态汇总双 sheet),`python-pptx` 生成真 `.pptx`(封面 + KPI + 明细表三页,Paydaes 青色主题)→ `POST /api/report/export` → `GET /api/report/download/{file}` 真下载。读真库数据。**hr_admin / payroll / finance / sys_admin 可导**。
+- **报销类型「编辑」模态框**:类型行新增「编辑」按钮 → 预填模态框(编码锁定) → `PUT /api/claim_types/{code}` 真更新。
+
 ## 🔌 配置后台 API 一览
 | 端点 | 方法 | 说明 |
 |---|---|---|

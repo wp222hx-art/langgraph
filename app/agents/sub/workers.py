@@ -289,16 +289,26 @@ _PERSONA = {
 }
 
 
-def conversation_agent(agent: str, content: str) -> str:
-    """人格化润色:主 Agent 已分发 LLM 则用其人格重写回复,无绑定则原样返回(零回归)。"""
+def conversation_agent(agent: str, content: str, perm_profile: str = "") -> str:
+    """人格化润色:主 Agent 已分发 LLM 则用其人格重写回复,无绑定则原样返回(零回归)。
+    perm_profile:当前登录者的身份与权限画像 —— 注入系统提示,让 AI 全程知道'在为谁服务、
+    他能做什么',从而在对话里主动守住权限边界、拒绝越权请求(权限贯穿)。"""
     if not content or not content.strip():
         return content
     cfg = _llm_cfg(agent)
     if cfg:
         try:
             persona = _PERSONA.get(agent, "企业报销助手")
+            perm_block = ""
+            if perm_profile:
+                perm_block = (
+                    f"\n{perm_profile}\n"
+                    "你必须始终遵守上述权限边界:若回复内容涉及当前登录者无权执行的操作,"
+                    "应明确指出其权限不足、并告知应由哪个角色处理,绝不擅自越权代办。\n"
+                )
             sys = (
                 f"你的人格设定:{persona}\n"
+                f"{perm_block}"
                 "请用该人格的语气润色下面这段系统回复,使其更自然、专业、有温度。"
                 "严格保留所有数字、金额、单据编号、状态等事实信息,不得编造或删改。"
                 "保持简洁,不要加多余寒暄,直接输出润色后的正文。"

@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.core.orchestrator import run_turn
-from app.core import llm_gateway
+from app.core import llm_gateway, permissions
 from app.data import enterprise, navigation, mock_db, paydaes_modules, db, calc
 
 app = FastAPI(title="Paydaes ClaimGPT", version="3.0")
@@ -66,6 +66,7 @@ class ChatReq(BaseModel):
     message: str
     thread_id: str = "default"
     company: str = "sg"
+    role: str = "employee"        # 当前登录者角色(AI 据此判定身份与权限)
 
 
 class ClaimReq(BaseModel):
@@ -76,6 +77,7 @@ class ClaimReq(BaseModel):
     currency: str = ""
     note: str = ""
     emp_id: str = ""
+    role: str = "employee"
 
 
 class OcrReq(BaseModel):
@@ -87,6 +89,14 @@ class OcrReq(BaseModel):
 class DecideReq(BaseModel):
     status: str            # approved / rejected / paid
     approver: str = "审批副驾"
+    role: str = "approver"
+
+
+class BatchDecideReq(BaseModel):
+    company: str = "sg"
+    status: str = "approved"
+    risk_level: str | None = None
+    role: str = "approver"
 
 
 class FamilyReq(BaseModel):
@@ -94,6 +104,7 @@ class FamilyReq(BaseModel):
     emp_id: str = ""
     relation: str
     name: str
+    role: str = "employee"
 
 
 class ClaimTypeReq(BaseModel):
@@ -104,12 +115,31 @@ class ClaimTypeReq(BaseModel):
     grp: str = "日常"
     limit_amt: float = 0
     need_invoice: bool = True
+    role: str = "hr_admin"
 
 
 class ModuleRecordReq(BaseModel):
     module_id: str
     company: str = "sg"
     payload: dict = {}
+    role: str = "hr_admin"
+
+
+class BalanceAdjustReq(BaseModel):
+    company: str = "sg"
+    emp_id: str = ""
+    kind: str = "增加"          # 增加 / 减少 / 转移
+    amount: float = 0
+    reason: str = ""            # 必填原因(留痕)
+    to_emp_id: str = ""         # 转移时的目标员工
+    role: str = "finance"
+
+
+class ReportExportReq(BaseModel):
+    company: str = "sg"
+    module_id: str = "rpt_claim"
+    fmt: str = "excel"          # excel / ppt
+    role: str = "finance"
 
 
 @app.get("/api/agents")
@@ -170,7 +200,8 @@ def get_modules():
 
 @app.post("/api/chat")
 def chat(req: ChatReq):
-    return run_turn(req.message, req.thread_id, req.company)
+    # 把当前登录者角色注入 AI,使其判定身份并拒绝越权请求
+    return run_turn(req.message, req.thread_id, req.company, role=req.role)
 
 
 # ═══════ 真实报销单 CRUD(SQLite 持久化) ═══════
@@ -182,7 +213,9 @@ def list_claim_types(company: str = "sg"):
 
 @app.post("/api/claim_types")
 def create_claim_type(req: ClaimTypeReq):
-    """新增报销类型(真写库)"""
+    """新增报销类型(真写库) —— 需 claim_type.create 权限"""
+    if not permissions.can(req.role, "claim_type.create"):
+        return permissions.deny_payload(req.role, "claim_type.create")
     try:
         ct = db.create_claim_type(req.company, req.code, req.name, req.name_en,
                                   req.grp, req.limit_amt, req.need_invoice)
@@ -193,7 +226,9 @@ def create_claim_type(req: ClaimTypeReq):
 
 @app.put("/api/claim_types/{code}")
 def update_claim_type(code: str, req: ClaimTypeReq):
-    """更新报销类型"""
+    """更新报销类型 —— 需 claim_type.update 权限"""
+    if not permissions.can(req.role, "claim_type.update"):
+        return permissions.deny_payload(req.role, "claim_type.update")
     ct = db.update_claim_type(req.company, code, name=req.name or None,
                               name_en=req.name_en or None, grp=req.grp or None,
                               limit_amt=req.limit_amt, need_invoice=req.need_invoice)
@@ -201,8 +236,10 @@ def update_claim_type(code: str, req: ClaimTypeReq):
 
 
 @app.delete("/api/claim_types/{code}")
-def delete_claim_type(code: str, company: str = "sg"):
-    """删除报销类型(被引用则拒绝)"""
+def delete_claim_type(code: str, company: str = "sg", role: str = "hr_admin"):
+    """删除报销类型(被引用则拒绝) —— 需 claim_type.delete 权限"""
+    if not permissions.can(role, "claim_type.delete"):
+        return permissions.deny_payload(role, "claim_type.delete")
     try:
         db.delete_claim_type(company, code)
         return {"ok": True}
@@ -218,12 +255,18 @@ def list_module_records(module_id: str, company: str = "sg"):
 
 @app.post("/api/module_records")
 def add_module_record(req: ModuleRecordReq):
+    """新增配置记录 —— 需 module_record.create 权限"""
+    if not permissions.can(req.role, "module_record.create"):
+        return permissions.deny_payload(req.role, "module_record.create")
     rec = db.add_module_record(req.module_id, req.company, req.payload)
     return {"ok": True, "record": rec}
 
 
 @app.delete("/api/module_records/{rid}")
-def delete_module_record(rid: int, company: str = "sg"):
+def delete_module_record(rid: int, company: str = "sg", role: str = "hr_admin"):
+    """删除配置记录 —— 需 module_record.delete 权限"""
+    if not permissions.can(role, "module_record.delete"):
+        return permissions.deny_payload(role, "module_record.delete")
     return {"ok": db.delete_module_record(rid, company)}
 
 
@@ -285,15 +328,20 @@ def ocr_invoice(req: OcrReq):
 
 @app.post("/api/claims/{claim_id}/decide")
 def decide_claim(claim_id: str, req: DecideReq):
-    """审批:真改状态 + 留痕"""
+    """审批:真改状态 + 留痕 —— 需 claim.approve 权限(最高权限可裁决)"""
+    if not permissions.can(req.role, "claim.approve"):
+        return permissions.deny_payload(req.role, "claim.approve")
     cl = db.decide_claim(claim_id, req.status, req.approver)
     return cl or {"error": "not found"}
 
 
 @app.post("/api/claims/batch_decide")
-def batch_decide(company: str = "sg", status: str = "approved", risk_level: str | None = None):
-    n = db.batch_decide(company, status, risk_level=risk_level)
-    return {"affected": n, "stats": db.claim_stats(company)}
+def batch_decide(req: BatchDecideReq):
+    """批量审批 —— 需 claim.batch_approve 权限"""
+    if not permissions.can(req.role, "claim.batch_approve"):
+        return permissions.deny_payload(req.role, "claim.batch_approve")
+    n = db.batch_decide(req.company, req.status, risk_level=req.risk_level)
+    return {"affected": n, "stats": db.claim_stats(req.company)}
 
 
 @app.get("/api/balance")
@@ -317,13 +365,72 @@ def tax_calc(company: str = "sg", amount: float = 0):
 
 @app.post("/api/family")
 def add_family(req: FamilyReq):
+    """新增家属 —— 需 family.manage 权限"""
+    if not permissions.can(req.role, "family.manage"):
+        return permissions.deny_payload(req.role, "family.manage")
     emp = db.get_employee(req.emp_id or None, req.company) or {}
     return db.add_family(emp.get("id", ""), req.company, req.relation, req.name)
+
+
+# ═══════ 余额调整(增/减/转移 · 必填原因 · 全留痕) ═══════
+@app.post("/api/balance/adjust")
+def balance_adjust(req: BalanceAdjustReq):
+    """审核调整报销余额 —— 需 balance.adjust 权限(财务/审计/系统管理员)"""
+    if not permissions.can(req.role, "balance.adjust"):
+        return permissions.deny_payload(req.role, "balance.adjust")
+    if not (req.reason or "").strip():
+        return {"error": "调整原因必填 / reason is required"}
+    if req.amount is None or req.amount <= 0:
+        return {"error": "调整金额需大于 0 / amount must be > 0"}
+    try:
+        res = db.adjust_balance(req.company, req.emp_id or None, req.kind,
+                                req.amount, req.reason, req.to_emp_id or None, req.role)
+        return {"ok": True, **res}
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/balance/history")
+def balance_history(company: str = "sg", emp_id: str | None = None):
+    return {"history": db.balance_history(company, emp_id)}
+
+
+# ═══════ 报表导出 PPT / Excel(真生成文件) ═══════
+@app.post("/api/report/export")
+def report_export(req: ReportExportReq):
+    """导出报表 —— 需 report.export 权限。真生成 .xlsx / .pptx 文件并返回下载路径。"""
+    if not permissions.can(req.role, "report.export"):
+        return permissions.deny_payload(req.role, "report.export")
+    from app.core import reporting
+    try:
+        out = reporting.export_report(req.module_id, req.company, req.fmt)
+        return {"ok": True, **out}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/report/download/{fname}")
+def report_download(fname: str):
+    import os
+    from app.core import reporting
+    path = os.path.join(reporting.EXPORT_DIR, os.path.basename(fname))
+    if not os.path.exists(path):
+        return {"error": "file not found"}
+    return FileResponse(path, filename=fname)
 
 
 @app.get("/api/audit")
 def audit(company: str = "sg"):
     return {"logs": db.recent_audit(company)}
+
+
+@app.get("/api/whoami")
+def whoami(role: str = "employee", lang: str = "zh"):
+    """返回当前角色的权限画像(供前端隐藏越权按钮 + 调试)"""
+    acts = permissions.ROLE_ACTIONS.get(role, set())
+    allowed = list(permissions.ACTIONS.keys()) if "*" in acts else sorted(acts)
+    return {"role": role, "allowed": allowed,
+            "is_admin": "*" in acts, "describe": permissions.describe(role, lang)}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -495,10 +602,12 @@ def admin_status():
 
 
 @app.get("/api/chat/stream")
-async def chat_stream(message: str, thread_id: str = "default", company: str = "sg"):
-    """SSE 流式:先推送思考过程,再逐字推送回复(打字机)"""
+async def chat_stream(message: str, thread_id: str = "default", company: str = "sg",
+                      role: str = "employee"):
+    """SSE 流式:先推送思考过程,再逐字推送回复(打字机)。
+    role:当前登录者身份 —— 贯穿到 AI,实现身份判定与越权裁决。"""
     async def gen():
-        result = run_turn(message, thread_id, company)
+        result = run_turn(message, thread_id, company, role=role)
 
         # 1) 路由信息
         yield _sse("route", {"agent": result["agent"], "module": result["module"],

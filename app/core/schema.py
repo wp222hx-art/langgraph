@@ -46,6 +46,7 @@ class ClaimState(TypedDict, total=False):
     target_agent: Optional[str]     # 路由到哪个主 Agent
     confidence: float               # 意图置信度
     company: str                    # 当前租户公司(sg/my/th/vn/id/hk/cn)
+    role: str                       # 当前登录者角色(权限贯穿:AI 据此判定身份与裁决越权)
 
     # 业务上下文(各子 Agent 填充)
     extracted: dict[str, Any]       # 抽取结果(OCR 等)

@@ -223,7 +223,9 @@ function tableView(m) {
         opCell = `<td class="text-right"><button class="btn btn-ghost text-xs py-1 text-rose-500" onclick="deleteRow('rec','${rid}')"><i class="fas fa-trash"></i></button></td>`;
       } else if (handle && handle.startsWith('__type:')) {
         const code = handle.slice(7);
-        opCell = `<td class="text-right"><button class="btn btn-ghost text-xs py-1 text-rose-500" onclick="deleteRow('type','${code}')"><i class="fas fa-trash"></i></button></td>`;
+        opCell = `<td class="text-right whitespace-nowrap">
+          <button class="btn btn-ghost text-xs py-1 text-teal-600" onclick="editClaimType('${code}')"><i class="fas fa-pen"></i></button>
+          <button class="btn btn-ghost text-xs py-1 text-rose-500" onclick="deleteRow('type','${code}')"><i class="fas fa-trash"></i></button></td>`;
       } else {
         opCell = `<td class="text-right"><span class="text-xs text-slate-300">${t('crud.seed')}</span></td>`;
       }
@@ -288,12 +290,37 @@ function flowView(m) {
 }
 
 function reportView(m) {
+  // 导出权限:hr_admin / payroll / finance / sys_admin
+  const canExport = S.role && ['hr_admin', 'payroll', 'finance', 'sys_admin'].includes(S.role.id);
+  const exportBtns = canExport ? `
+      <div class="flex gap-2 mt-3">
+        <button class="btn btn-ghost flex-1 justify-center text-emerald-600" onclick="exportReport('excel')"><i class="fas fa-file-excel"></i> ${t('report.export_excel')}</button>
+        <button class="btn btn-ghost flex-1 justify-center text-orange-600" onclick="exportReport('ppt')"><i class="fas fa-file-powerpoint"></i> ${t('report.export_ppt')}</button>
+      </div>
+      <p class="text-[11px] text-slate-400 mt-2" id="rpt-export-fb"></p>` : `
+      <p class="text-[11px] text-slate-400 mt-3"><i class="fas fa-lock"></i> ${t('report.no_perm')}</p>`;
   return `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="panel p-5 lg:col-span-2"><div class="font-semibold text-slate-800 mb-3">${m.title}</div><div class="chart-box"><canvas id="rpt-chart"></canvas></div></div>
-    <div class="panel p-5"><div class="font-semibold text-slate-800 mb-2"><i class="fas fa-lightbulb text-amber-400"></i> AI 洞察</div>
+    <div class="panel p-5"><div class="font-semibold text-slate-800 mb-2"><i class="fas fa-lightbulb text-amber-400"></i> ${t('report.ai_insight')}</div>
       <p class="text-sm text-slate-600 leading-relaxed">${m.insight}</p>
-      <button class="btn btn-ai w-full mt-4 justify-center" onclick="openAI('InsightOracle','分析${m.title}')"><i class="fas fa-robot"></i> 对话式深度分析</button></div></div>`;
+      <button class="btn btn-ai w-full mt-4 justify-center" onclick="openAI('InsightOracle','分析${m.title}')"><i class="fas fa-robot"></i> ${t('report.deep_analysis')}</button>
+      ${exportBtns}</div></div>`;
 }
+async function exportReport(fmt) {
+  const fb = document.getElementById('rpt-export-fb');
+  if (fb) acFlash(fb, t('report.exporting'), false);
+  try {
+    const r = await fetch('/api/report/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company: S.company.id, module_id: S.currentNav, fmt, role: S.role.id }) }).then(x => x.json());
+    if (r.denied || r.error) { if (fb) acFlash(fb, r.error || t('perm.denied'), true); return; }
+    // 真下载:用隐藏 a 触发
+    const a = document.createElement('a');
+    a.href = r.download_url; a.download = r.filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    if (fb) acFlash(fb, `✅ ${t('report.export_done')} · ${r.filename} (${(r.size / 1024).toFixed(1)}KB)`, false);
+  } catch (e) { if (fb) acFlash(fb, t('claim.load_err'), true); }
+}
+window.exportReport = exportReport;
 function drawReportChart(m) {
   new Chart($('#rpt-chart'), { type: m.chart.kind || 'bar',
     data: { labels: m.chart.labels, datasets: m.chart.series.map(s => ({ label: s.name, data: s.data, backgroundColor: 'rgba(32,201,151,.75)', borderRadius: 6 })) },
@@ -338,17 +365,76 @@ function selfClaimView(m) {
 }
 
 function balanceView(m) {
-  const b = m.balance;
+  const emps = m.employees || [];
+  const cur = m.currency || 'SGD';
+  const empOpts = emps.map(e => `<option value="${e.id}" data-quota="${e.quota}">${e.name} · ${e.dept} (${e.quota}${cur})</option>`).join('');
+  // 权限:仅 finance / sys_admin 可调整;其余角色只读历史
+  const canAdjust = S.role && (S.role.id === 'finance' || S.role.id === 'sys_admin');
+  const formPanel = canAdjust ? `
+    <div class="panel p-5"><div class="font-semibold text-slate-800 mb-3"><i class="fas fa-sliders text-teal-500"></i> ${t('balance.adjust_title')}</div>
+      <div class="space-y-2">
+        <label class="text-xs text-slate-500">${t('balance.emp')}</label>
+        <select class="ac-input" id="bal-emp">${empOpts}</select>
+        <label class="text-xs text-slate-500">${t('balance.kind')}</label>
+        <select class="ac-input" id="bal-kind" onchange="toggleTransferTarget()">
+          <option value="增加">${t('balance.add')}</option>
+          <option value="减少">${t('balance.reduce')}</option>
+          <option value="转移">${t('balance.transfer')}</option>
+        </select>
+        <div id="bal-target-wrap" class="hidden">
+          <label class="text-xs text-slate-500">${t('balance.to_emp')}</label>
+          <select class="ac-input" id="bal-target">${empOpts}</select>
+        </div>
+        <label class="text-xs text-slate-500">${t('balance.amount')} (${cur})</label>
+        <input class="ac-input" id="bal-amount" type="number" step="0.01" placeholder="0.00">
+        <label class="text-xs text-slate-500">${t('balance.reason')} <span class="text-rose-400">*</span></label>
+        <input class="ac-input" id="bal-reason" placeholder="${t('balance.reason_ph')}">
+        <button class="btn btn-primary w-full justify-center mt-1" onclick="submitBalanceAdjust()"><i class="fas fa-check"></i> ${t('balance.submit')}</button>
+      </div>
+      <p class="text-[11px] text-slate-400 mt-2" id="bal-feedback"></p>
+      <p class="text-[11px] text-slate-400 mt-1"><i class="fas fa-shield-halved text-emerald-400"></i> ${t('balance.audit_note')}</p>
+    </div>` : `
+    <div class="panel p-5"><div class="font-semibold text-slate-800 mb-2"><i class="fas fa-lock text-slate-300"></i> ${t('balance.adjust_title')}</div>
+      <p class="text-sm text-slate-500 leading-relaxed">${t('balance.no_perm')}</p>
+      <p class="text-[11px] text-slate-400 mt-2"><i class="fas fa-circle-info"></i> ${t('balance.allowed_roles')}</p></div>`;
   return `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-    <div class="panel p-5"><div class="text-sm text-slate-400">当前余额 · ${b.name}</div>
-      <div class="text-3xl font-bold text-slate-900 mt-1">${b.remaining}</div>
-      <div class="flex gap-2 mt-4"><button class="btn btn-ghost flex-1 justify-center text-emerald-600">增加</button>
-        <button class="btn btn-ghost flex-1 justify-center text-amber-600">减少</button><button class="btn btn-ghost flex-1 justify-center">转移</button></div>
-      <p class="text-[11px] text-slate-400 mt-3"><i class="fas fa-circle-info"></i> 所有调整必填原因,全程留痕审计</p></div>
-    <div class="panel p-5 lg:col-span-2"><div class="font-semibold text-slate-800 mb-3">调整历史(审计留痕)</div>
-      <div class="table-wrap"><table class="dtable"><thead><tr><th>日期</th><th>类型</th><th>金额</th><th>原因</th><th>操作人</th></tr></thead>
-        <tbody>${m.history.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div></div>`;
+    ${formPanel}
+    <div class="panel p-5 lg:col-span-2"><div class="flex items-center justify-between mb-3">
+        <div class="font-semibold text-slate-800">${t('balance.history')}</div>
+        <button class="btn btn-ghost text-xs py-1" onclick="go(S.currentNav)"><i class="fas fa-rotate"></i> ${t('claim.refresh')}</button></div>
+      <div class="table-wrap"><table class="dtable"><thead><tr>
+        <th>${t('balance.h_date')}</th><th>${t('balance.h_kind')}</th><th>${t('balance.h_amount')}</th><th>${t('balance.h_emp')}</th><th>${t('balance.h_reason')}</th><th>${t('balance.h_op')}</th></tr></thead>
+        <tbody>${(m.history || []).length ? m.history.map(r => `<tr>${r.map(c => `<td>${badgeCell(c)}</td>`).join('')}</tr>`).join('')
+          : `<tr><td colspan="6" class="text-center text-slate-400 py-6">${t('balance.empty')}</td></tr>`}</tbody></table></div></div></div>`;
 }
+function toggleTransferTarget() {
+  const kind = (document.getElementById('bal-kind') || {}).value;
+  const wrap = document.getElementById('bal-target-wrap');
+  if (wrap) wrap.classList.toggle('hidden', kind !== '转移');
+}
+window.toggleTransferTarget = toggleTransferTarget;
+async function submitBalanceAdjust() {
+  const fb = document.getElementById('bal-feedback');
+  const emp_id = (document.getElementById('bal-emp') || {}).value || '';
+  const kind = (document.getElementById('bal-kind') || {}).value || '增加';
+  const amount = parseFloat((document.getElementById('bal-amount') || {}).value || '0');
+  const reason = ((document.getElementById('bal-reason') || {}).value || '').trim();
+  const to_emp_id = (document.getElementById('bal-target') || {}).value || '';
+  if (!emp_id) { acFlash(fb, t('balance.need_emp'), true); return; }
+  if (!amount || amount <= 0) { acFlash(fb, t('balance.need_amount'), true); return; }
+  if (!reason) { acFlash(fb, t('balance.need_reason'), true); return; }
+  if (kind === '转移' && (!to_emp_id || to_emp_id === emp_id)) { acFlash(fb, t('balance.need_target'), true); return; }
+  acFlash(fb, t('claim.submitting'), false);
+  try {
+    const r = await fetch('/api/balance/adjust', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company: S.company.id, emp_id, kind, amount, reason, to_emp_id, role: S.role.id }) }).then(x => x.json());
+    if (r.denied || r.error) { acFlash(fb, r.error || t('perm.denied'), true); return; }
+    const bal = r.balance || {};
+    acFlash(fb, `✅ ${t('balance.done')} · ${r.emp} ${kind} ${amount} → ${t('balance.remaining')}: ${bal.remaining}`, false);
+    setTimeout(() => go(S.currentNav), 700);
+  } catch (e) { acFlash(fb, t('claim.load_err'), true); }
+}
+window.submitBalanceAdjust = submitBalanceAdjust;
 
 function familyView(m) {
   return `<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -382,7 +468,8 @@ async function addFamily() {
   acFlash(fb, t('claim.submitting'), false);
   try {
     const r = await fetch('/api/family', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company: S.company.id, relation, name }) }).then(x => x.json());
+      body: JSON.stringify({ company: S.company.id, relation, name, role: S.role.id }) }).then(x => x.json());
+    if (r.denied || r.error) { acFlash(fb, r.error || t('perm.denied'), true); return; }
     acFlash(fb, '✅ ' + t('fam.added') + ' ' + (r.name || name), false);
     document.getElementById('fam-name').value = '';
     // 重新拉模块刷新列表
@@ -413,15 +500,17 @@ function openCrudModal() {
   const inputs = fields.map(f => {
     const id = `crf-${f.key}`;
     const req = f.required ? '<span class="text-rose-400">*</span>' : '';
+    const val = (f.value !== undefined && f.value !== null) ? String(f.value) : '';
+    const ro = f.readonly ? 'readonly style="background:#f8fafc;color:#94a3b8"' : '';
     let ctrl;
     if (f.type === 'select') {
-      ctrl = `<select class="ac-input" id="${id}">${(f.options || []).map(o => `<option value="${o}">${o}</option>`).join('')}</select>`;
+      ctrl = `<select class="ac-input" id="${id}">${(f.options || []).map(o => `<option value="${o}" ${o === val ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
     } else if (f.type === 'number') {
-      ctrl = `<input class="ac-input" id="${id}" type="number" step="0.01" placeholder="${f.placeholder || ''}">`;
+      ctrl = `<input class="ac-input" id="${id}" type="number" step="0.01" placeholder="${f.placeholder || ''}" value="${val}" ${ro}>`;
     } else if (f.type === 'date') {
-      ctrl = `<input class="ac-input" id="${id}" type="date">`;
+      ctrl = `<input class="ac-input" id="${id}" type="date" value="${val}">`;
     } else {
-      ctrl = `<input class="ac-input" id="${id}" placeholder="${f.placeholder || ''}">`;
+      ctrl = `<input class="ac-input" id="${id}" placeholder="${f.placeholder || ''}" value="${val}" ${ro}>`;
     }
     return `<div class="mb-2"><label class="text-xs text-slate-500 mb-1 block">${f.label}${req}</label>${ctrl}</div>`;
   }).join('');
@@ -430,7 +519,7 @@ function openCrudModal() {
   ov.className = 'crud-overlay';
   ov.innerHTML = `<div class="crud-modal">
     <div class="flex items-center justify-between mb-3">
-      <div class="font-semibold text-slate-800"><i class="fas fa-plus-circle text-teal-500"></i> ${crud.action}</div>
+      <div class="font-semibold text-slate-800"><i class="fas ${crud.edit_code ? 'fa-pen-to-square' : 'fa-plus-circle'} text-teal-500"></i> ${crud.action}</div>
       <button class="text-slate-400 hover:text-slate-600" onclick="closeCrudModal()"><i class="fas fa-xmark"></i></button>
     </div>
     <div>${inputs}</div>
@@ -460,16 +549,23 @@ async function submitCrud() {
     let r;
     if (crud.kind === 'claim_type') {
       // 报销类型 → 走真 claim_types 表
-      r = await fetch('/api/claim_types', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          company: S.company.id, code: vals.code, name: vals.name, name_en: vals.name_en || '',
-          grp: vals.grp || '日常', limit_amt: parseFloat(vals.limit_amt || '0'),
-          need_invoice: (vals.need_invoice || '是') === '是',
-        }) }).then(x => x.json());
+      const ctBody = {
+        company: S.company.id, code: vals.code, name: vals.name, name_en: vals.name_en || '',
+        grp: vals.grp || '日常', limit_amt: parseFloat(vals.limit_amt || '0'),
+        need_invoice: (vals.need_invoice || '是') === '是', role: S.role.id,
+      };
+      // 编辑模式 → PUT;新建模式 → POST
+      if (crud.edit_code) {
+        r = await fetch(`/api/claim_types/${encodeURIComponent(crud.edit_code)}`, { method: 'PUT',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ctBody) }).then(x => x.json());
+      } else {
+        r = await fetch('/api/claim_types', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ctBody) }).then(x => x.json());
+      }
     } else {
       // 其它表格模块 → 通用 module_records
       r = await fetch('/api/module_records', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ module_id: crud.module_id, company: S.company.id, payload: vals }) }).then(x => x.json());
+        body: JSON.stringify({ module_id: crud.module_id, company: S.company.id, payload: vals, role: S.role.id }) }).then(x => x.json());
     }
     if (r.error) { acFlash(fb, r.error, true); return; }
     acFlash(fb, '✅ ' + t('crud.saved'), false);
@@ -477,14 +573,38 @@ async function submitCrud() {
   } catch (e) { acFlash(fb, t('claim.load_err'), true); }
 }
 
+// ════════ 报销类型编辑(PUT) —— 预填模态框 ════════
+async function editClaimType(code) {
+  try {
+    const types = await fetch(`/api/claim_types?company=${S.company.id}`).then(r => r.json()).then(x => x.types || []);
+    const ct = types.find(t_ => t_.code === code);
+    if (!ct) { toast(t('crud.not_found') || 'not found', true); return; }
+    // 构造编辑用 crud 配置(code 锁定不可改,作为主键)
+    window.__crud = {
+      module_id: 'claim_type', kind: 'claim_type', edit_code: code,
+      action: (S.lang === 'en' ? 'Edit claim type' : '编辑报销类型') + ' · ' + code,
+      fields: [
+        { key: 'code', label: t('ct.code') || '编码', type: 'text', required: true, readonly: true, value: ct.code },
+        { key: 'name', label: t('ct.name') || '名称', type: 'text', required: true, value: ct.name },
+        { key: 'name_en', label: t('ct.name_en') || '英文名', type: 'text', value: ct.name_en || '' },
+        { key: 'grp', label: t('ct.grp') || '分组', type: 'select', options: ['日常', '差旅', '福利'], value: ct.grp || '日常' },
+        { key: 'limit_amt', label: (t('ct.limit') || '限额') + `(${S.company.currency || 'SGD'})`, type: 'number', required: true, value: ct.limit_amt },
+        { key: 'need_invoice', label: t('ct.need_invoice') || '需发票', type: 'select', options: ['是', '否'], value: ct.need_invoice ? '是' : '否' },
+      ],
+    };
+    openCrudModal();
+  } catch (e) { toast(t('claim.load_err'), true); }
+}
+window.editClaimType = editClaimType;
+
 async function deleteRow(kind, key) {
   if (!confirm(t('crud.confirm_del'))) return;
   try {
     let r;
     if (kind === 'type') {
-      r = await fetch(`/api/claim_types/${encodeURIComponent(key)}?company=${S.company.id}`, { method: 'DELETE' }).then(x => x.json());
+      r = await fetch(`/api/claim_types/${encodeURIComponent(key)}?company=${S.company.id}&role=${S.role.id}`, { method: 'DELETE' }).then(x => x.json());
     } else {
-      r = await fetch(`/api/module_records/${key}?company=${S.company.id}`, { method: 'DELETE' }).then(x => x.json());
+      r = await fetch(`/api/module_records/${key}?company=${S.company.id}&role=${S.role.id}`, { method: 'DELETE' }).then(x => x.json());
     }
     if (r.error) { toast(r.error, true); return; }
     toast(t('crud.deleted'));
@@ -499,7 +619,7 @@ async function decideClaim(cid, status) {
   if (fb) acFlash(fb, t('claim.submitting'), false);
   try {
     const r = await fetch(`/api/claims/${encodeURIComponent(cid)}/decide`, { method: 'POST',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }).then(x => x.json());
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, role: S.role.id }) }).then(x => x.json());
     if (r.error) { if (fb) acFlash(fb, r.error, true); return; }
     const word = status === 'approved' ? t('crud.approved') : t('crud.rejected');
     if (fb) acFlash(fb, `✅ ${cid} ${word}`, false);
@@ -510,8 +630,10 @@ async function batchApprove() {
   const fb = document.getElementById('approval-feedback');
   if (fb) acFlash(fb, t('claim.submitting'), false);
   try {
-    const r = await fetch(`/api/claims/batch_decide?company=${S.company.id}&status=approved&risk_level=低`,
-      { method: 'POST' }).then(x => x.json());
+    const r = await fetch('/api/claims/batch_decide', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company: S.company.id, status: 'approved', risk_level: '低', role: S.role.id }) }).then(x => x.json());
+    if (r.denied || r.error) { if (fb) acFlash(fb, r.error || t('perm.denied'), true); return; }
     if (fb) acFlash(fb, `✅ ${t('crud.batch_done')} ${r.affected || 0}`, false);
     go(S.currentNav);
   } catch (e) { if (fb) acFlash(fb, t('claim.load_err'), true); }
@@ -592,6 +714,7 @@ async function submitClaim() {
   };
   acFlash(fb, t('claim.submitting'), false);
   try {
+    payload.role = S.role.id;
     const r = await fetch('/api/claims', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(x => x.json());
     if (r.error) { acFlash(fb, r.error, true); return; }
     const risk = r.risk || {}; const cl = r.claim || {};
@@ -800,7 +923,7 @@ function sendAI() {
   aiScroll();
 
   let bubble = null, badge = '';
-  const es = new EventSource(`/api/chat/stream?message=${encodeURIComponent(text)}&thread_id=${S.threadId}`);
+  const es = new EventSource(`/api/chat/stream?message=${encodeURIComponent(text)}&thread_id=${S.threadId}&company=${S.company.id}&role=${S.role.id}`);
   es.addEventListener('route', e => {
     const d = JSON.parse(e.data);
     const t = S.agents.find(a => a.id === d.agent); if (t) selectAgentSilent(t);

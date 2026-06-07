@@ -146,14 +146,7 @@ def get_module_view(module_id: str, company: str = "sg") -> dict:
                 ["BATCH-20260520", "98", "⚠️ 警告", "2", "薪资专员"],
             ],
         },
-        "balance_adj": {
-            "title": "审核 / 调整报销余额", "desc": "增加、减少、转移余额,必填原因,全留痕审计", "layout": "balance",
-            "balance": mock_db.get_balance("E001"),
-            "history": [
-                ["2026-05-20", "增加", f"+2000 {cur}", "年中权益追加", "财务-王芳"],
-                ["2026-03-15", "减少", f"-500 {cur}", "误录修正", "财务-王芳"],
-            ],
-        },
+        "balance_adj": _balance_adj_view(company, cur),
         # ── 报表 ──
         "rpt_benefit": _report_view("福利使用报表", "使用率分析、权益余额追踪"),
         "rpt_travel": _report_view("差旅申请报表", "预估 vs 实际、KPI 分析"),
@@ -209,6 +202,33 @@ def _claim_type_view(company: str, cur: str) -> dict:
             {"key": "limit_amt", "label": f"限额({cur})", "type": "number", "required": True, "placeholder": "2000"},
             {"key": "need_invoice", "label": "需发票", "type": "select", "options": ["是", "否"]},
         ]},
+    }
+
+
+def _balance_adj_view(company: str, cur: str) -> dict:
+    """余额调整 —— 真实员工列表 + 真实调整历史(balance_adjust 表)。"""
+    emps = db._rows("SELECT id, name, dept, annual_quota FROM employees WHERE company=? ORDER BY id", (company,))
+    employees = [{"id": e["id"], "name": e["name"], "dept": e.get("dept", ""),
+                  "quota": e.get("annual_quota", 0)} for e in emps]
+    # 真实历史(若空则给出引导占位)
+    hist_rows = db.balance_history(company)
+    history = []
+    for h in hist_rows:
+        sign = "+" if h["kind"] == "增加" else ("-" if h["kind"] == "减少" else "→")
+        target = f" → {h['to_emp_name']}" if h.get("to_emp_name") else ""
+        history.append([
+            (h.get("created_at") or "")[:16], h["kind"],
+            f"{sign}{h['amount']:g} {cur}", h.get("emp_name", "") + target,
+            h.get("reason", ""), h.get("operator", ""),
+        ])
+    first = employees[0] if employees else {"id": "", "name": "", "quota": 0}
+    return {
+        "title": "审核 / 调整报销余额",
+        "desc": "增加、减少、转移员工年度额度,必填原因,全程留痕审计(真实数据库)",
+        "layout": "balance", "currency": cur,
+        "employees": employees,
+        "current": first,
+        "history": history,
     }
 
 

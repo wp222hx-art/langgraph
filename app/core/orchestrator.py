@@ -15,6 +15,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agents.main.handlers import MAIN_AGENTS
 from app.agents.sub import workers
+from app.core import permissions
 from app.core.schema import ClaimState
 
 
@@ -29,13 +30,20 @@ def node_intent(state: ClaimState) -> dict:
 # ── 节点2:主 Agent 执行(动态分发到 5 个主 Agent) ──
 def node_main_agent(state: ClaimState) -> dict:
     agent_name = state.get("target_agent") or "ClaimMate"
+    role = state.get("role") or "employee"
     handler = MAIN_AGENTS.get(agent_name, MAIN_AGENTS["ClaimMate"])
     result = handler(dict(state))
     # 合并思考链:意图节点的 think + 主Agent的 think
     merged_think = list(state.get("think", [])) + list(result.get("think", []))
+    # 权限贯穿:把当前登录者的身份与权限画像注入出口 LLM,
+    # 让 AI「知道在为谁服务、他能做什么」,在对话中主动拒绝越权请求
+    perm_profile = permissions.describe(role)
+    if not result.get("_denied"):
+        merged_think.append({"agent": "PermissionGuard", "action": "身份裁决",
+                             "detail": f"已识别登录者权限({permissions.ROLE_NAMES.get(role, (role,))[0]}),AI 全程按权限边界应答"})
     # 出口人格化润色:该主 Agent 已分发 LLM 则用其人格重写回复,无绑定原样返回
     raw_reply = result["reply"]
-    polished = workers.conversation_agent(agent_name, raw_reply)
+    polished = workers.conversation_agent(agent_name, raw_reply, perm_profile=perm_profile)
     if polished != raw_reply:
         merged_think.append({"agent": agent_name, "action": "人格化润色",
                              "detail": "已分发模型在线,按 Agent 人格润色回复(事实信息保持不变)"})
@@ -74,10 +82,12 @@ def build_graph():
 GRAPH = build_graph()
 
 
-def run_turn(user_input: str, thread_id: str = "default", company: str = "sg") -> dict:
-    """执行一轮编排,返回完整结果(含思考链、卡片、回复)"""
+def run_turn(user_input: str, thread_id: str = "default", company: str = "sg",
+             role: str = "employee") -> dict:
+    """执行一轮编排,返回完整结果(含思考链、卡片、回复)。
+    role:当前登录者角色 —— 贯穿到状态与 Agent,实现 AI 身份判定与越权裁决。"""
     config = {"configurable": {"thread_id": thread_id}}
-    init = {"user_input": user_input, "company": company,
+    init = {"user_input": user_input, "company": company, "role": role or "employee",
             "messages": [{"role": "user", "content": user_input}]}
     final = GRAPH.invoke(init, config)
     return {

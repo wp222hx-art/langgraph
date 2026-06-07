@@ -154,6 +154,22 @@ CREATE TABLE IF NOT EXISTS module_records (
     created_by TEXT DEFAULT '当前用户'
 );
 CREATE INDEX IF NOT EXISTS idx_modrec ON module_records(module_id, company);
+
+-- ⑤ 余额调整流水(增/减/转移 · 必填原因 · 全留痕)
+CREATE TABLE IF NOT EXISTS balance_adjust (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    company    TEXT NOT NULL,
+    emp_id     TEXT NOT NULL,
+    emp_name   TEXT,
+    kind       TEXT NOT NULL,           -- 增加 / 减少 / 转移
+    amount     REAL NOT NULL,
+    reason     TEXT NOT NULL,           -- 必填原因
+    to_emp_id  TEXT,                    -- 转移目标
+    to_emp_name TEXT,
+    operator   TEXT,                    -- 操作人(角色)
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_baladj ON balance_adjust(company);
 """
 
 
@@ -383,6 +399,60 @@ def delete_claim_type(company: str, code: str) -> bool:
     _exec("DELETE FROM claim_types WHERE code=? AND company=?", (code, company))
     log(company, "当前用户", "删除报销类型", code, "")
     return True
+
+
+# ═══════════════════════════════════════════════
+# 余额调整(增/减/转移 · 必填原因 · 全留痕)
+# ═══════════════════════════════════════════════
+def adjust_balance(company: str, emp_id: str | None, kind: str, amount: float,
+                   reason: str, to_emp_id: str | None = None,
+                   operator: str = "finance") -> dict:
+    """调整员工年度额度:增加/减少/转移。写流水留痕。"""
+    emp = get_employee(emp_id, company)
+    if not emp:
+        raise ValueError("员工不存在 / employee not found")
+    amount = float(amount)
+    quota = float(emp.get("annual_quota", 0))
+    to_emp = None
+    if kind == "增加":
+        new_quota = quota + amount
+        _exec("UPDATE employees SET annual_quota=? WHERE id=?", (new_quota, emp["id"]))
+    elif kind == "减少":
+        if amount > quota:
+            raise ValueError(f"减少额 {amount} 超过当前额度 {quota} / exceeds quota")
+        new_quota = quota - amount
+        _exec("UPDATE employees SET annual_quota=? WHERE id=?", (new_quota, emp["id"]))
+    elif kind == "转移":
+        to_emp = get_employee(to_emp_id, company)
+        if not to_emp:
+            raise ValueError("转移目标员工不存在 / target employee not found")
+        if amount > quota:
+            raise ValueError(f"转移额 {amount} 超过当前额度 {quota} / exceeds quota")
+        _exec("UPDATE employees SET annual_quota=? WHERE id=?", (quota - amount, emp["id"]))
+        _exec("UPDATE employees SET annual_quota=? WHERE id=?",
+              (float(to_emp.get("annual_quota", 0)) + amount, to_emp["id"]))
+    else:
+        raise ValueError(f"未知调整类型 {kind}")
+    _exec(
+        "INSERT INTO balance_adjust(company,emp_id,emp_name,kind,amount,reason,"
+        "to_emp_id,to_emp_name,operator,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (company, emp["id"], emp.get("name"), kind, amount, reason,
+         to_emp_id if to_emp else None, to_emp.get("name") if to_emp else None,
+         operator, _now()))
+    log(company, operator, f"余额调整·{kind}", emp["id"], f"{amount} | {reason}")
+    return {"emp": emp.get("name"), "kind": kind, "amount": amount,
+            "balance": get_balance(emp["id"], company),
+            "to_emp": to_emp.get("name") if to_emp else None}
+
+
+def balance_history(company: str = "sg", emp_id: str | None = None) -> list[dict]:
+    sql = "SELECT * FROM balance_adjust WHERE company=?"
+    params: list[Any] = [company]
+    if emp_id:
+        sql += " AND emp_id=?"
+        params.append(emp_id)
+    sql += " ORDER BY id DESC LIMIT 50"
+    return _rows(sql, tuple(params))
 
 
 # ═══════════════════════════════════════════════

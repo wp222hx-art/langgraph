@@ -102,12 +102,28 @@ const I18N = {
       saved: '已保存', deleted: '已删除', confirm_del: '确定删除这一行吗?',
       approve: '通过', reject: '驳回', approved: '已通过', rejected: '已驳回',
       batch_low: '一键批量通过低风险', batch_done: '已批量通过笔数:',
+      edit: '编辑', not_found: '未找到',
     },
     fam: {
       archive: '家属档案', add: '新增家属', name: '家属姓名', need_name: '请输入家属姓名',
       added: '已新增家属', empty: '暂无家属', linkable: '可关联报销', ai: '对话式登记家属',
       spouse: '配偶', child: '子女', parent: '父母',
     },
+    perm: { denied: '权限不足,操作被拒绝' },
+    balance: {
+      adjust_title: '余额调整', emp: '员工', kind: '调整类型', add: '增加', reduce: '减少', transfer: '转移',
+      to_emp: '转移目标员工', amount: '金额', reason: '调整原因', reason_ph: '请填写调整原因(必填留痕)',
+      submit: '确认调整', audit_note: '所有调整全程留痕,可审计追溯', remaining: '剩余额度',
+      no_perm: '当前身份无权调整余额,仅可查看历史。', allowed_roles: '可执行该操作:财务/审计、系统管理员',
+      need_emp: '请选择员工', need_amount: '请输入有效金额', need_reason: '调整原因必填', need_target: '请选择转移目标(不能与本人相同)',
+      done: '调整成功', history: '调整历史(审计留痕)', empty: '暂无调整记录',
+      h_date: '时间', h_kind: '类型', h_amount: '金额', h_emp: '员工', h_reason: '原因', h_op: '操作人',
+    },
+    report: {
+      export_excel: '导出 Excel', export_ppt: '导出 PPT', exporting: '正在生成报表…', export_done: '导出完成',
+      no_perm: '当前身份无权导出报表', ai_insight: 'AI 洞察', deep_analysis: '对话式深度分析',
+    },
+    ct: { code: '编码', name: '名称', name_en: '英文名', grp: '分组', limit: '限额', need_invoice: '需发票' },
   },
 
   // ─────────────── English(全量) ───────────────
@@ -198,12 +214,28 @@ const I18N = {
       saved: 'Saved', deleted: 'Deleted', confirm_del: 'Delete this row?',
       approve: 'Approve', reject: 'Reject', approved: 'approved', rejected: 'rejected',
       batch_low: 'Batch approve low-risk', batch_done: 'Batch approved:',
+      edit: 'Edit', not_found: 'Not found',
     },
     fam: {
       archive: 'Family Archive', add: 'Add Member', name: 'Member name', need_name: 'Please enter a name',
       added: 'Member added', empty: 'No members', linkable: 'Claim-linkable', ai: 'Register via chat',
       spouse: 'Spouse', child: 'Child', parent: 'Parent',
     },
+    perm: { denied: 'Permission denied' },
+    balance: {
+      adjust_title: 'Balance Adjustment', emp: 'Employee', kind: 'Type', add: 'Increase', reduce: 'Decrease', transfer: 'Transfer',
+      to_emp: 'Transfer target', amount: 'Amount', reason: 'Reason', reason_ph: 'Reason is required (audit trail)',
+      submit: 'Confirm', audit_note: 'All adjustments are fully audited & traceable', remaining: 'Remaining',
+      no_perm: 'Your role cannot adjust balances; history is read-only.', allowed_roles: 'Allowed: Finance/Audit, System Admin',
+      need_emp: 'Please select an employee', need_amount: 'Enter a valid amount', need_reason: 'Reason is required', need_target: 'Select a transfer target (not self)',
+      done: 'Adjusted', history: 'Adjustment History (Audit)', empty: 'No records yet',
+      h_date: 'Time', h_kind: 'Type', h_amount: 'Amount', h_emp: 'Employee', h_reason: 'Reason', h_op: 'Operator',
+    },
+    report: {
+      export_excel: 'Export Excel', export_ppt: 'Export PPT', exporting: 'Generating report…', export_done: 'Export done',
+      no_perm: 'Your role cannot export reports', ai_insight: 'AI Insight', deep_analysis: 'Conversational deep analysis',
+    },
+    ct: { code: 'Code', name: 'Name', name_en: 'English name', grp: 'Group', limit: 'Limit', need_invoice: 'Invoice req.' },
   },
 
   // ─── 其余 4 语言:回退到 en,保留 key 框架,后续可逐步填充 ───

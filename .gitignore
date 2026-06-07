@@ -17,3 +17,4 @@ sweep2.py
 claimgpt.db
 claimgpt.db-wal
 claimgpt.db-shm
+exports/

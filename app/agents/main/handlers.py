@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.agents.sub import workers
+from app.core import permissions
 from app.data import mock_db, db, calc
 
 
@@ -107,6 +108,14 @@ def approval_copilot(state: dict) -> dict[str, Any]:
     # 意图:是否是执行性指令(批量通过低风险)
     do_batch = any(k in text for k in ["批量通过", "一键通过", "都通过", "全部通过", "batch approve", "approve all"])
     if do_batch:
+        # 【权限贯穿·handler 硬拦截】无批量审批权的角色(如普通员工)让 AI 代办审批 → 写库前拦住
+        role = state.get("role") or "employee"
+        if not permissions.can(role, "claim.batch_approve"):
+            dp = permissions.deny_payload(role, "claim.batch_approve")
+            think.append(_think("PermissionGuard", "越权拦截", dp["error"]))
+            allowed = "、".join(dp["allowed_roles"])
+            return {"reply": f"⛔ {dp['error']} 我不能代你执行审批。请联系【{allowed}】处理该批量审批。",
+                    "cards": cards, "think": think, "needs_human": False, "hil_level": "L4", "_denied": True}
         think.append(_think("WorkflowAgent", "批量审批入库", "低风险 pending → approved"))
         n = db.batch_decide(company, "approved", risk_level="低")
         stat = db.claim_stats(company)
