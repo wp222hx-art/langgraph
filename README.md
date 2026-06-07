@@ -140,6 +140,14 @@
 - `GET  /api/modules` —— 18 模块清单
 - `POST /api/chat` —— 一次性对话(body: `{message, thread_id}`)
 - `GET  /api/chat/stream?message=&thread_id=` —— SSE 流式对话(思考链 + 打字机 + 卡片)
+- `GET  /api/telemetry` —— **AI 中枢实时遥测**:13 Agent(5主+8子)真实命中状态(`recent`/`count`/`since_ms`)+ 整体吞吐(`tps`/`avg_latency_ms`)。供侧边栏「活体仪表盘」每 1.5s 轮询,**某 Agent 被 `run_turn` 实际命中 → 对应 LED 真的爆闪**
+
+## 📡 真·实时可观测面板(Telemetry 埋点)
+侧边栏底部的「AI 中枢状态面板」已从视觉装饰升级为**真实可观测仪表盘**:
+- **零侵入埋点**:`app/core/telemetry.py` 线程安全内存计数器,`hit()`/`turn()`/`snapshot()`,静默失败(零回归)
+- **天然中枢点**:子 Agent 在 `handlers._think()` 处统一埋点(一行捕获全部 8 子 Agent);主 Agent + IntentAgent + ConversationAgent 在 `orchestrator` 编排节点埋点
+- **13 Agent 归一化**:5 主 + 8 子,内部别名(`ValidationAgent→RiskAgent` 等)自动映射到前端 LED canonical id
+- **效果**:不同业务请求点亮不同灯路 —— 报销链路亮 `ClaimMate+Risk+Extract+Workflow+Conv`,薪资跑批亮 `PayrollNavigator+Workflow+Conv`,真实反映 Agent 调用路径。既是科技感卖点,又是运维价值。
 
 ## 🏗️ 技术架构(轻量化重构后)
 ```

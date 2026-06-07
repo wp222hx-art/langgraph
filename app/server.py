@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.core.orchestrator import run_turn
-from app.core import llm_gateway, permissions
+from app.core import llm_gateway, permissions, telemetry
 from app.data import enterprise, navigation, mock_db, paydaes_modules, db, calc
 
 app = FastAPI(title="Paydaes ClaimGPT", version="3.0")
@@ -431,6 +431,13 @@ def whoami(role: str = "employee", lang: str = "zh"):
     allowed = list(permissions.ACTIONS.keys()) if "*" in acts else sorted(acts)
     return {"role": role, "allowed": allowed,
             "is_admin": "*" in acts, "describe": permissions.describe(role, lang)}
+
+
+@app.get("/api/telemetry")
+def telemetry_snapshot():
+    """AI 中枢实时遥测 —— 供侧边栏「活体仪表盘」轮询。
+    返回 13 个 Agent 的真实命中状态(recent/count/since_ms) + 整体吞吐(tps/avg_latency)。"""
+    return telemetry.snapshot()
 
 
 # ═══════════════════════════════════════════════════════════

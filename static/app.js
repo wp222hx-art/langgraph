@@ -58,26 +58,89 @@ function initCorePanel() {
   startCoreHeartbeat();
 }
 let _coreTimer = null;
+// LED 索引 → telemetry canonical Agent id 映射
+// 前 5 = 主 Agent(对齐 S.agents 顺序),后 8 = CORE_SUB → SUB_AGENTS
+const CORE_SUB_ID = {
+  Intent: 'IntentAgent', Policy: 'PolicyAgent', Risk: 'RiskAgent', Extract: 'ExtractionAgent',
+  Workflow: 'WorkflowAgent', Entitle: 'EntitlementAgent', Conv: 'ConversationAgent', Audit: 'AuditAgent',
+};
+function _coreLedAgentIds() {
+  // 返回 LED 索引顺序对应的 canonical id 数组(长度 13)
+  const mains = (S.agents || []).slice(0, 5).map(a => a.id);
+  while (mains.length < 5) mains.push(null);
+  const subs = CORE_SUB.map(s => CORE_SUB_ID[s] || null);
+  return mains.concat(subs);
+}
+let _coreLastSince = {};  // 记录上次各 Agent 的 since_ms,用于"新命中"判定(避免重复爆闪)
 function startCoreHeartbeat() {
   if (_coreTimer) clearInterval(_coreTimer);
   const leds = $$('#core-agent-grid .core-led');
   const dots = $$('#core-mod-grid .core-dot');
-  _coreTimer = setInterval(() => {
-    // 随机一个 Agent 闪烁(模拟被调度)
-    if (leds.length) {
-      const led = leds[Math.floor(Math.random() * leds.length)];
-      led.classList.remove('flash'); void led.offsetWidth; led.classList.add('flash');
+  const ledIds = _coreLedAgentIds();
+  let _idleTick = 0;
+  _coreTimer = setInterval(async () => {
+    let real = null;
+    try {
+      const r = await fetch('/api/telemetry');
+      if (r.ok) real = await r.json();
+    } catch (e) { /* 静默失败:零回归,降级到温和兜底 */ }
+
+    if (real && Array.isArray(real.agents)) {
+      // ── 真实数据驱动 ──
+      const byId = {};
+      real.agents.forEach(a => { byId[a.id] = a; });
+      let activeCount = 0;
+      ledIds.forEach((id, i) => {
+        const led = leds[i];
+        if (!led || !id) return;
+        const a = byId[id];
+        if (a && a.recent) {
+          activeCount++;
+          // 仅当本轮 since_ms 比上次更"新鲜"(说明刚被命中)才爆闪,常亮态保持
+          const prev = _coreLastSince[id];
+          const fresh = (prev == null) || (a.since_ms != null && a.since_ms < (prev - 200)) || (a.since_ms != null && a.since_ms < 1600);
+          led.classList.add('on');
+          if (fresh) { led.classList.remove('flash'); void led.offsetWidth; led.classList.add('flash'); }
+        } else {
+          led.classList.remove('on');
+        }
+        if (a) _coreLastSince[id] = a.since_ms;
+      });
+      // 真实指标
+      const lat = $('#core-lat');
+      if (lat) lat.textContent = (real.avg_latency_ms != null ? real.avg_latency_ms : '–') + 'ms';
+      const tps = $('#core-tps');
+      if (tps) tps.textContent = (real.tps != null ? real.tps : 0).toFixed(1);
+      const act = $('#core-agent-active');
+      if (act) act.textContent = activeCount;
+      // 模块点阵:有活跃 Agent 时点亮对应数量的"忙碌"点,呼应真实负载
+      if (dots.length) {
+        const busyN = Math.min(dots.length, activeCount * 2);
+        dots.forEach((d, i) => d.classList.toggle('busy', i < busyN));
+      }
+      // 完全无真实流量时,偶尔来一次温和待机脉冲,避免死气沉沉
+      if (activeCount === 0) {
+        _idleTick++;
+        if (_idleTick % 3 === 0 && leds.length) {
+          const led = leds[Math.floor(Math.random() * leds.length)];
+          led.classList.remove('flash'); void led.offsetWidth; led.classList.add('flash');
+        }
+      } else {
+        _idleTick = 0;
+      }
+    } else {
+      // ── 兜底:接口不可用时温和模拟(零回归) ──
+      if (leds.length) {
+        const led = leds[Math.floor(Math.random() * leds.length)];
+        led.classList.remove('flash'); void led.offsetWidth; led.classList.add('flash');
+      }
+      if (dots.length) {
+        const d = dots[Math.floor(Math.random() * dots.length)];
+        d.classList.add('busy');
+        setTimeout(() => d.classList.remove('busy'), 1100);
+      }
     }
-    // 随机 1~2 个模块切到"忙碌"黄,短暂后恢复
-    if (dots.length) {
-      const d = dots[Math.floor(Math.random() * dots.length)];
-      d.classList.add('busy');
-      setTimeout(() => d.classList.remove('busy'), 1100);
-    }
-    // 运维微指标轻微抖动(真实感)
-    const lat = $('#core-lat'); if (lat) lat.textContent = (30 + Math.floor(Math.random() * 22)) + 'ms';
-    const tps = $('#core-tps'); if (tps) tps.textContent = (9 + Math.random() * 6).toFixed(1);
-  }, 1800);
+  }, 1500);
 }
 
 // ════════ 顶部栏渲染 ════════

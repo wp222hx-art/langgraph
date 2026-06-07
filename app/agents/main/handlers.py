@@ -10,11 +10,12 @@ from __future__ import annotations
 from typing import Any
 
 from app.agents.sub import workers
-from app.core import permissions
+from app.core import permissions, telemetry
 from app.data import mock_db, db, calc
 
 
 def _think(agent: str, action: str, detail: str = "") -> dict:
+    telemetry.hit(agent)   # 真实埋点:子 Agent 每次工作即点亮对应灯(零回归)
     return {"agent": agent, "action": action, "detail": detail}
 
 

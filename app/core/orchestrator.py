@@ -15,12 +15,15 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agents.main.handlers import MAIN_AGENTS
 from app.agents.sub import workers
-from app.core import permissions
+from app.core import permissions, telemetry
 from app.core.schema import ClaimState
+
+import time as _t
 
 
 # ── 节点1:意图识别与路由(IntentAgent) ──
 def node_intent(state: ClaimState) -> dict:
+    telemetry.hit("IntentAgent")  # 真实埋点:意图识别命中
     result = workers.intent_agent(state["user_input"])
     think = [{"agent": "IntentAgent", "action": "意图识别",
               "detail": f"命中模块「{result['module']}」→ 路由到 {result['target_agent']}(置信度 {result['confidence']})"}]
@@ -31,6 +34,7 @@ def node_intent(state: ClaimState) -> dict:
 def node_main_agent(state: ClaimState) -> dict:
     agent_name = state.get("target_agent") or "ClaimMate"
     role = state.get("role") or "employee"
+    telemetry.hit(agent_name)  # 真实埋点:主 Agent 被实际分发命中
     handler = MAIN_AGENTS.get(agent_name, MAIN_AGENTS["ClaimMate"])
     result = handler(dict(state))
     # 合并思考链:意图节点的 think + 主Agent的 think
@@ -43,6 +47,7 @@ def node_main_agent(state: ClaimState) -> dict:
                              "detail": f"已识别登录者权限({permissions.ROLE_NAMES.get(role, (role,))[0]}),AI 全程按权限边界应答"})
     # 出口人格化润色:该主 Agent 已分发 LLM 则用其人格重写回复,无绑定原样返回
     raw_reply = result["reply"]
+    telemetry.hit("ConversationAgent")  # 真实埋点:出口人格化润色命中
     polished = workers.conversation_agent(agent_name, raw_reply, perm_profile=perm_profile)
     if polished != raw_reply:
         merged_think.append({"agent": agent_name, "action": "人格化润色",
@@ -89,7 +94,9 @@ def run_turn(user_input: str, thread_id: str = "default", company: str = "sg",
     config = {"configurable": {"thread_id": thread_id}}
     init = {"user_input": user_input, "company": company, "role": role or "employee",
             "messages": [{"role": "user", "content": user_input}]}
+    _start = _t.time()
     final = GRAPH.invoke(init, config)
+    telemetry.turn((_t.time() - _start) * 1000)  # 真实埋点:整轮编排耗时(ms)
     return {
         "reply": final.get("reply", ""),
         "cards": final.get("cards", []),
