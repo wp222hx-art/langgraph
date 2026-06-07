@@ -306,8 +306,20 @@ def get_claim_types(company: str = "sg") -> list[dict]:
 
 
 def get_claim_type(code: str, company: str = "sg") -> dict | None:
-    return _one("SELECT * FROM claim_types WHERE code=? AND company=?", (code, company)) \
-        or _one("SELECT * FROM claim_types WHERE name=? AND company=?", (code, company))
+    if not code:
+        return None
+    # 精确:code / name / name_en
+    hit = (_one("SELECT * FROM claim_types WHERE code=? AND company=?", (code, company))
+           or _one("SELECT * FROM claim_types WHERE name=? AND company=?", (code, company))
+           or _one("SELECT * FROM claim_types WHERE name_en=? AND company=?", (code, company)))
+    if hit:
+        return hit
+    # 模糊:类别词互含(如 OCR 出"餐饮" 匹配类型"餐饮费"),双向 LIKE
+    key = str(code).strip()
+    return _one(
+        "SELECT * FROM claim_types WHERE company=? AND (name LIKE ? OR ? LIKE '%'||name||'%' "
+        "OR name_en LIKE ?) LIMIT 1",
+        (company, f"%{key}%", key, f"%{key}%"))
 
 
 def list_claims(company: str = "sg", status: str | None = None,
