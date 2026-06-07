@@ -27,6 +27,25 @@
 - **人机协同(Human-in-the-loop)**:高风险单据触发 L2 协同,人类最终审批
 - **Checkpoint 持久化**:基于 MemorySaver,支持会话记忆与长事务断点续跑
 
+### 三、真实业务功能(告别演示,全面落地)
+- **SQLite 持久化**(`app/data/db.py`,零新增依赖):员工 / 报销类型 / 报销单 / 家属 / 审计日志,WAL 模式 + 线程安全
+- **真实计算引擎**(`app/data/calc.py`):
+  - **跨币种汇率**(以 CNY 为锚的交叉汇率换算)
+  - **价内税反算**(`税额 = 金额 × r/(1+r)`,东南亚 7 国真实税率:SG GST 9% / MY SST 6% / TH VAT 7% / VN VAT 10% / ID PPN 11% / HK 0% / CN 6%·13%)
+  - **限额校验** + **多因子风险评分**(超限 45 / 大额 22 / 整百 10 / 缺票 18)
+- **AI 对话真入库**:对话提交 → 真实落库生成单据编号 → 余额联动扣减
+- **批量审批真改状态** + 审计留痕
+- **全面中英文 i18n**:`t(key)` 点路径查找,`data-i18n` DOM 扫描,localStorage 记忆语言
+
+### 四、AI 配置后台(统一管理 API · 模型 · Agent 分发)
+- **基础配置**:接入 TokenHost.cn / DeepSeek / Claude(Anthropic) / OpenAI,Key **提交 → 验证 → 激活** 三段式
+  - 双协议网关(`app/core/llm_gateway.py`):`openai_compatible`(Bearer)+ `anthropic`(x-api-key)
+  - **Key 加密存储**:XOR + sha256 + base64,**绝不外泄前端**(前端只见 `key_tail` 后 4 位、不进 git)
+- **模型管理**:一键拉取平台支持的全部模型接口,逐模型认定(启用 / 停用)+ 能力自动识别
+- **分发应用**:8 个可分发 Agent(3 核心能力节点 + 5 主 Agent),为每个 Agent 指派"平台 + 模型"
+  - **分发真正生效**:`intent_agent` / `policy_agent` / `conversation_agent` 接入网关
+  - **优雅降级**:**有绑定走 LLM,无绑定 / 调用失败自动回退内置规则引擎**(零回归,系统永不挂)
+
 ## 🌍 全球合规体系(东南亚 7 国)
 | 国家 | 税种 | 税率 | 会计准则 |
 |------|------|------|---------|

@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.core.orchestrator import run_turn
+from app.core import llm_gateway
 from app.data import enterprise, navigation, mock_db, paydaes_modules, db, calc
 
 app = FastAPI(title="Paydaes ClaimGPT", version="3.0")
@@ -229,6 +230,174 @@ def add_family(req: FamilyReq):
 @app.get("/api/audit")
 def audit(company: str = "sg"):
     return {"logs": db.recent_audit(company)}
+
+
+# ═══════════════════════════════════════════════════════════
+#  统一配置后台 API —— 基础配置 / 模型管理 / 分发应用
+# ═══════════════════════════════════════════════════════════
+
+# 可被分发的 Agent 目标:5 个主 Agent + 3 个内部能力节点
+BINDABLE_AGENTS = [
+    {"id": "_intent", "name": "意图识别(路由)", "name_en": "Intent Routing", "emoji": "🧭", "scope": "core",
+     "desc": "把用户话术路由到正确的主 Agent", "desc_en": "Route user input to the right agent"},
+    {"id": "_ocr", "name": "票据 OCR 抽取", "name_en": "Invoice OCR", "emoji": "📸", "scope": "core",
+     "desc": "拍照识别发票金额/商户/品类(Vision)", "desc_en": "Vision OCR for invoices"},
+    {"id": "_policy", "name": "政策推理", "name_en": "Policy Reasoning", "emoji": "📐", "scope": "core",
+     "desc": "复杂规则与配置建议生成", "desc_en": "Complex rules & config advice"},
+    {"id": "ClaimMate", "name": "报销伙伴", "name_en": "ClaimMate", "emoji": "🙋", "scope": "main",
+     "desc": "对话报销 · 余额 · 差旅", "desc_en": "Chat claim · Balance · Travel"},
+    {"id": "ApprovalCopilot", "name": "审批副驾", "name_en": "ApprovalCopilot", "emoji": "✅", "scope": "main",
+     "desc": "风险分级 · 批量审批", "desc_en": "Risk grading · Batch approve"},
+    {"id": "HRStrategist", "name": "HR战略顾问", "name_en": "HR Strategist", "emoji": "🧠", "scope": "main",
+     "desc": "对话式配置 · 政策推理", "desc_en": "Chat config · Policy"},
+    {"id": "PayrollNavigator", "name": "薪资领航员", "name_en": "Payroll Navigator", "emoji": "⚙️", "scope": "main",
+     "desc": "跑批 · 对账 · 汇率", "desc_en": "Batch · Reconcile · FX"},
+    {"id": "InsightOracle", "name": "洞察先知", "name_en": "Insight Oracle", "emoji": "📊", "scope": "main",
+     "desc": "NL2SQL · 报表 · 洞察", "desc_en": "NL2SQL · Report · Insight"},
+]
+
+
+class ProviderReq(BaseModel):
+    id: str = ""               # 留空则用 preset / 自定义
+    preset: str = ""           # tokenhost / deepseek / claude / openai
+    name: str = ""
+    kind: str = "openai_compatible"
+    base_url: str = ""
+    api_key: str = ""          # 提交新 Key;留空表示不改
+
+
+class BindingReq(BaseModel):
+    agent_id: str
+    provider_id: str | None = None
+    model_id: str | None = None
+
+
+class ModelToggleReq(BaseModel):
+    model_pk: int
+    enabled: bool
+
+
+@app.get("/api/admin/presets")
+def admin_presets():
+    """内置平台预设 + 可分发 Agent 清单(前端下拉用)"""
+    return {"presets": llm_gateway.PROVIDER_PRESETS, "agents": BINDABLE_AGENTS}
+
+
+# ── ① 基础配置:平台 CRUD ──
+@app.get("/api/admin/providers")
+def admin_list_providers():
+    return {"providers": db.list_providers()}
+
+
+@app.post("/api/admin/providers")
+def admin_upsert_provider(req: ProviderReq):
+    """新增/更新平台。支持 preset 一键带出 base_url/kind。"""
+    pid = req.id
+    name, kind, base_url = req.name, req.kind, req.base_url
+    if req.preset and req.preset in llm_gateway.PROVIDER_PRESETS:
+        ps = llm_gateway.PROVIDER_PRESETS[req.preset]
+        pid = pid or req.preset
+        name = name or ps["name"]
+        kind = ps["kind"]
+        base_url = base_url or ps["base_url"]
+    if not pid:
+        return {"error": "缺少平台标识 id 或 preset"}
+    p = db.upsert_provider(pid, name or pid, kind, base_url, req.api_key or None)
+    return {"provider": p}
+
+
+@app.delete("/api/admin/providers/{pid}")
+def admin_delete_provider(pid: str):
+    db.delete_provider(pid)
+    return {"ok": True}
+
+
+# ── ① 基础配置:Key 验证与激活 ──
+@app.post("/api/admin/providers/{pid}/verify")
+def admin_verify_provider(pid: str):
+    """验证 Key → 通过则置 verified;并自动拉模型列表入库。"""
+    p = db.get_provider(pid, with_key=True)
+    if not p:
+        return {"error": "not found"}
+    res = llm_gateway.verify_key(p["kind"], p["base_url"], p.get("api_key", ""))
+    if res["ok"]:
+        db.set_provider_status(pid, "verified", res["msg"])
+        # 顺带拉模型
+        try:
+            models = llm_gateway.list_models(p["kind"], p["base_url"], p.get("api_key", ""))
+            db.replace_models(pid, models)
+            res["models_pulled"] = len(models)
+        except Exception as e:
+            res["models_pulled"] = 0
+            res["pull_msg"] = str(e)
+    else:
+        db.set_provider_status(pid, "error", res["msg"])
+    return {"verify": res, "provider": db.get_provider(pid)}
+
+
+@app.post("/api/admin/providers/{pid}/activate")
+def admin_activate_provider(pid: str, on: bool = True):
+    """激活/停用平台(只有 verified/active 才能被 Agent 使用)。"""
+    p = db.get_provider(pid)
+    if not p:
+        return {"error": "not found"}
+    if on and p["status"] not in ("verified", "active"):
+        return {"error": "请先验证 Key 通过后再激活"}
+    db.set_provider_status(pid, "active" if on else "verified", "已激活" if on else "已停用")
+    return {"provider": db.get_provider(pid)}
+
+
+# ── ② 模型管理:拉取 / 认定 ──
+@app.post("/api/admin/providers/{pid}/models/pull")
+def admin_pull_models(pid: str):
+    """重新拉取平台模型列表入库。"""
+    p = db.get_provider(pid, with_key=True)
+    if not p:
+        return {"error": "not found"}
+    try:
+        models = llm_gateway.list_models(p["kind"], p["base_url"], p.get("api_key", ""))
+        n = db.replace_models(pid, models)
+        return {"count": n, "models": db.list_models(pid)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/admin/models")
+def admin_list_models(provider_id: str | None = None, enabled_only: bool = False):
+    return {"models": db.list_models(provider_id, enabled_only)}
+
+
+@app.post("/api/admin/models/toggle")
+def admin_toggle_model(req: ModelToggleReq):
+    """认定/取消认定某模型(enabled)。"""
+    db.set_model_enabled(req.model_pk, req.enabled)
+    return {"ok": True}
+
+
+# ── ③ 分发应用:Agent ↔ 模型 绑定 ──
+@app.get("/api/admin/bindings")
+def admin_list_bindings():
+    return {"bindings": db.list_bindings(), "agents": BINDABLE_AGENTS}
+
+
+@app.post("/api/admin/bindings")
+def admin_set_binding(req: BindingReq):
+    b = db.set_binding(req.agent_id, req.provider_id, req.model_id)
+    return {"binding": b, "resolved": db.resolve_binding(req.agent_id) is not None}
+
+
+@app.get("/api/admin/status")
+def admin_status():
+    """配置健康总览:有几个激活平台、几个启用模型、几个 Agent 已绑定可用。"""
+    providers = db.list_providers()
+    active = [p for p in providers if p["status"] == "active" and p["enabled"]]
+    models = db.list_models(enabled_only=True)
+    bound = [a for a in BINDABLE_AGENTS if db.resolve_binding(a["id"])]
+    return {
+        "providers_total": len(providers), "providers_active": len(active),
+        "models_enabled": len(models), "agents_bound": len(bound),
+        "agents_total": len(BINDABLE_AGENTS),
+    }
 
 
 @app.get("/api/chat/stream")

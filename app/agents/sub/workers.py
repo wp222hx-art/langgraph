@@ -10,6 +10,15 @@ import re
 from typing import Any
 
 from app.data import mock_db, db, calc
+from app.core import llm_gateway
+
+
+def _llm_cfg(agent_id: str) -> dict | None:
+    """解析某 Agent 是否已分发可用模型(配置后台绑定)。"""
+    try:
+        return db.resolve_binding(agent_id)
+    except Exception:
+        return None
 
 
 # ─────────────────────────────────────────────
@@ -45,14 +54,41 @@ _INTENT_RULES = [
 ]
 
 
-def intent_agent(text: str) -> dict[str, Any]:
+def _intent_by_rules(text: str) -> dict[str, Any]:
     text_l = text.lower()
     for keywords, agent, module in _INTENT_RULES:
         for kw in keywords:
             if kw.lower() in text_l:
-                return {"intent": module, "module": module, "target_agent": agent, "confidence": 0.95}
-    # 默认兜底到报销伙伴
-    return {"intent": "通用咨询", "module": "报销申请-自助", "target_agent": "ClaimMate", "confidence": 0.6}
+                return {"intent": module, "module": module, "target_agent": agent,
+                        "confidence": 0.95, "engine": "rule"}
+    return {"intent": "通用咨询", "module": "报销申请-自助", "target_agent": "ClaimMate",
+            "confidence": 0.6, "engine": "rule"}
+
+
+_VALID_AGENTS = {"ClaimMate", "ApprovalCopilot", "HRStrategist", "PayrollNavigator", "InsightOracle"}
+
+
+def intent_agent(text: str) -> dict[str, Any]:
+    """意图识别:已分发 LLM 则走 LLM,否则关键词规则兜底。"""
+    cfg = _llm_cfg("_intent")
+    if cfg:
+        try:
+            sys = (
+                "你是企业报销系统的意图路由器。根据用户输入,判断应路由到哪个主Agent。\n"
+                "可选 target_agent: ClaimMate(员工报销/余额/差旅/家属), ApprovalCopilot(审批/批量通过),"
+                " HRStrategist(配置报销类型/权益/政策), PayrollNavigator(跑批/对账/汇率),"
+                " InsightOracle(报表/分析/洞察)。\n"
+                '只输出 JSON: {"target_agent":"...","module":"...","confidence":0.0~1.0}'
+            )
+            r = llm_gateway.chat_json(cfg, sys, text)
+            agent = r.get("target_agent", "")
+            if agent in _VALID_AGENTS:
+                return {"intent": r.get("module", agent), "module": r.get("module", "报销申请-自助"),
+                        "target_agent": agent, "confidence": float(r.get("confidence", 0.9)),
+                        "engine": "llm"}
+        except Exception:
+            pass  # LLM 失败 → 规则兜底
+    return _intent_by_rules(text)
 
 
 # ─────────────────────────────────────────────
@@ -128,14 +164,38 @@ def risk_agent(extracted: dict, validation: dict) -> dict[str, Any]:
 # ─────────────────────────────────────────────
 # ⑤ PolicyAgent — 政策推理与复杂规则
 # ─────────────────────────────────────────────
+_POLICY_RULES = {
+    "报销权益": "建议 P7 及以上年度权益设为 3.5 万,P5-P6 设为 2.5 万,与市场 75 分位对齐。",
+    "生成权益流程": "检测到 3 名员工本年度晋升,建议按新职级重新核算年度权益包。",
+    "报销类型": "建议新增类型时关联税务编码与单笔限额,并设置是否强制上传发票。",
+    "余额调整": "调整需记录理由并留痕,单次调整超 5000 元建议触发二级审批。",
+}
+
+
+def _policy_by_rules(module: str) -> dict[str, Any]:
+    return {"policy": {"suggestion": _POLICY_RULES.get(module, "已应用标准政策规则。"),
+                       "engine": "rule"}}
+
+
 def policy_agent(module: str, text: str) -> dict[str, Any]:
-    suggestions = {
-        "报销权益": "建议 P7 及以上年度权益设为 3.5 万,P5-P6 设为 2.5 万,与市场 75 分位对齐。",
-        "生成权益流程": "检测到 3 名员工本年度晋升,建议按新职级重新核算年度权益包。",
-        "报销类型": "建议新增类型时关联税务编码与单笔限额,并设置是否强制上传发票。",
-        "余额调整": "调整需记录理由并留痕,单次调整超 5000 元建议触发二级审批。",
-    }
-    return {"policy": {"suggestion": suggestions.get(module, "已应用标准政策规则。")}}
+    """政策推理:已分发 LLM 则走 LLM 生成专业政策建议,否则规则兜底。"""
+    cfg = _llm_cfg("_policy")
+    if cfg:
+        try:
+            sys = (
+                "你是企业报销政策顾问。基于用户场景给出一条简明、可执行的政策建议(限80字内),"
+                "覆盖额度/税务/审批/留痕/合规角度。只输出建议正文,不要前缀、不要 JSON。"
+            )
+            reply = llm_gateway.chat(cfg, [
+                {"role": "system", "content": sys},
+                {"role": "user", "content": f"场景模块:{module}\n用户输入:{text}"},
+            ], temperature=0.3, max_tokens=200)
+            reply = (reply or "").strip()
+            if reply:
+                return {"policy": {"suggestion": reply, "engine": "llm"}}
+        except Exception:
+            pass  # LLM 失败 → 规则兜底
+    return _policy_by_rules(module)
 
 
 # ─────────────────────────────────────────────
@@ -189,13 +249,35 @@ def insight_agent(module: str, text: str, company: str = "sg") -> dict[str, Any]
 # ⑧ ConversationAgent — 多轮对话与人格化风格
 # ─────────────────────────────────────────────
 _PERSONA = {
-    "ClaimMate": "😊 我是你的报销伙伴",
-    "ApprovalCopilot": "🛡️ 审批副驾为你护航",
-    "HRStrategist": "🧠 HR 战略顾问在此",
-    "PayrollNavigator": "⚙️ 薪资领航员就位",
-    "InsightOracle": "📊 数据洞察先知洞悉一切",
+    "ClaimMate": "😊 报销伙伴,亲切、高效,帮员工快速搞定报销/余额/差旅。",
+    "ApprovalCopilot": "🛡️ 审批副驾,严谨、果断,为审批把关并给出处置建议。",
+    "HRStrategist": "🧠 HR 战略顾问,专业、有数据洞察,擅长权益与政策设计。",
+    "PayrollNavigator": "⚙️ 薪资领航员,精确、流程化,负责跑批/对账/汇率换算。",
+    "InsightOracle": "📊 数据洞察先知,洞察敏锐,善于把数据转成决策建议。",
 }
 
 
 def conversation_agent(agent: str, content: str) -> str:
+    """人格化润色:主 Agent 已分发 LLM 则用其人格重写回复,无绑定则原样返回(零回归)。"""
+    if not content or not content.strip():
+        return content
+    cfg = _llm_cfg(agent)
+    if cfg:
+        try:
+            persona = _PERSONA.get(agent, "企业报销助手")
+            sys = (
+                f"你的人格设定:{persona}\n"
+                "请用该人格的语气润色下面这段系统回复,使其更自然、专业、有温度。"
+                "严格保留所有数字、金额、单据编号、状态等事实信息,不得编造或删改。"
+                "保持简洁,不要加多余寒暄,直接输出润色后的正文。"
+            )
+            reply = llm_gateway.chat(cfg, [
+                {"role": "system", "content": sys},
+                {"role": "user", "content": content},
+            ], temperature=0.4, max_tokens=600)
+            reply = (reply or "").strip()
+            if reply:
+                return reply
+        except Exception:
+            pass  # LLM 失败 → 原文返回
     return content

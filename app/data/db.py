@@ -105,6 +105,43 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_claims_company ON claims(company);
 CREATE INDEX IF NOT EXISTS idx_claims_status  ON claims(company, status);
 CREATE INDEX IF NOT EXISTS idx_claims_emp     ON claims(emp_id);
+
+-- ① LLM 平台配置(TokenHost / DeepSeek / Claude ...)
+CREATE TABLE IF NOT EXISTS llm_providers (
+    id          TEXT PRIMARY KEY,        -- tokenhost / deepseek / claude / custom-xxx
+    name        TEXT NOT NULL,           -- 显示名
+    kind        TEXT NOT NULL,           -- openai_compatible / anthropic
+    base_url    TEXT NOT NULL,           -- API 基址
+    api_key_enc TEXT,                    -- 加密后的 Key
+    key_tail    TEXT,                    -- 末4位(展示用)
+    status      TEXT NOT NULL DEFAULT 'inactive',  -- inactive / verified / active / error
+    verify_msg  TEXT,                    -- 最近一次验证信息
+    enabled     INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT
+);
+
+-- ② 模型清单(从平台拉取并认定的模型)
+CREATE TABLE IF NOT EXISTS llm_models (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider_id  TEXT NOT NULL,
+    model_id     TEXT NOT NULL,          -- 平台侧模型标识 deepseek-chat / claude-3-5-sonnet ...
+    label        TEXT,                   -- 友好名
+    capability   TEXT,                   -- chat / vision / reasoning(逗号分隔)
+    enabled      INTEGER NOT NULL DEFAULT 1,   -- 是否认定启用
+    is_default   INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL,
+    UNIQUE(provider_id, model_id)
+);
+
+-- ③ Agent ↔ 模型 分发绑定
+CREATE TABLE IF NOT EXISTS agent_bindings (
+    agent_id     TEXT PRIMARY KEY,       -- ClaimMate / ApprovalCopilot / ... / _intent / _ocr / _policy
+    provider_id  TEXT,
+    model_id     TEXT,
+    note         TEXT,
+    updated_at   TEXT
+);
 """
 
 
@@ -386,3 +423,156 @@ def log(company: str, actor: str, action: str, target: str, detail: str = "") ->
 
 def recent_audit(company: str = "sg", limit: int = 20) -> list[dict]:
     return _rows("SELECT * FROM audit_log WHERE company=? ORDER BY id DESC LIMIT ?", (company, limit))
+
+
+# ═══════════════════════════════════════════════
+# LLM 配置:Key 加密(对称混淆,生产可换 KMS/Fernet)
+# ═══════════════════════════════════════════════
+import base64
+import hashlib
+
+_KEY_SECRET = os.environ.get("CLAIMGPT_SECRET", "paydaes-claimgpt-2026-secret")
+
+
+def _enc(plain: str) -> str:
+    if not plain:
+        return ""
+    k = hashlib.sha256(_KEY_SECRET.encode()).digest()
+    b = plain.encode()
+    out = bytes(c ^ k[i % len(k)] for i, c in enumerate(b))
+    return base64.b64encode(out).decode()
+
+
+def _dec(enc: str) -> str:
+    if not enc:
+        return ""
+    try:
+        k = hashlib.sha256(_KEY_SECRET.encode()).digest()
+        b = base64.b64decode(enc.encode())
+        out = bytes(c ^ k[i % len(k)] for i, c in enumerate(b))
+        return out.decode()
+    except Exception:
+        return ""
+
+
+# ── 平台 Providers ──
+def upsert_provider(pid: str, name: str, kind: str, base_url: str,
+                    api_key: str | None = None) -> dict:
+    now = _now()
+    existing = _one("SELECT * FROM llm_providers WHERE id=?", (pid,))
+    key_enc = _enc(api_key) if api_key else (existing["api_key_enc"] if existing else "")
+    key_tail = api_key[-4:] if api_key else (existing["key_tail"] if existing else "")
+    if existing:
+        _exec("UPDATE llm_providers SET name=?,kind=?,base_url=?,api_key_enc=?,key_tail=?,updated_at=? WHERE id=?",
+              (name, kind, base_url, key_enc, key_tail, now, pid))
+    else:
+        _exec("INSERT INTO llm_providers(id,name,kind,base_url,api_key_enc,key_tail,status,enabled,created_at,updated_at)"
+              " VALUES(?,?,?,?,?,?,?,?,?,?)",
+              (pid, name, kind, base_url, key_enc, key_tail, "inactive", 1, now, now))
+    return get_provider(pid)
+
+
+def get_provider(pid: str, with_key: bool = False) -> dict | None:
+    p = _one("SELECT * FROM llm_providers WHERE id=?", (pid,))
+    if not p:
+        return None
+    if with_key:
+        p["api_key"] = _dec(p.get("api_key_enc", ""))
+    p.pop("api_key_enc", None)
+    return p
+
+
+def list_providers() -> list[dict]:
+    rows = _rows("SELECT id,name,kind,base_url,key_tail,status,verify_msg,enabled,created_at,updated_at FROM llm_providers ORDER BY created_at")
+    return rows
+
+
+def set_provider_status(pid: str, status: str, msg: str = "") -> None:
+    _exec("UPDATE llm_providers SET status=?,verify_msg=?,updated_at=? WHERE id=?",
+          (status, msg, _now(), pid))
+
+
+def delete_provider(pid: str) -> None:
+    _exec("DELETE FROM agent_bindings WHERE provider_id=?", (pid,))
+    _exec("DELETE FROM llm_models WHERE provider_id=?", (pid,))
+    _exec("DELETE FROM llm_providers WHERE id=?", (pid,))
+
+
+# ── 模型 Models ──
+def replace_models(provider_id: str, models: list[dict]) -> int:
+    """用拉取到的模型列表覆盖该平台的模型(保留已有 enabled 状态)。"""
+    now = _now()
+    old = {m["model_id"]: m for m in list_models(provider_id)}
+    with _LOCK:
+        c = _conn()
+        try:
+            c.execute("DELETE FROM llm_models WHERE provider_id=?", (provider_id,))
+            for m in models:
+                mid = m.get("model_id") or m.get("id")
+                if not mid:
+                    continue
+                prev = old.get(mid)
+                enabled = prev["enabled"] if prev else 0
+                c.execute(
+                    "INSERT OR IGNORE INTO llm_models(provider_id,model_id,label,capability,enabled,is_default,created_at)"
+                    " VALUES(?,?,?,?,?,?,?)",
+                    (provider_id, mid, m.get("label", mid), m.get("capability", "chat"),
+                     enabled, 0, now))
+            c.commit()
+        finally:
+            c.close()
+    return len(models)
+
+
+def list_models(provider_id: str | None = None, enabled_only: bool = False) -> list[dict]:
+    sql = "SELECT * FROM llm_models"
+    params: list[Any] = []
+    conds = []
+    if provider_id:
+        conds.append("provider_id=?")
+        params.append(provider_id)
+    if enabled_only:
+        conds.append("enabled=1")
+    if conds:
+        sql += " WHERE " + " AND ".join(conds)
+    sql += " ORDER BY provider_id, model_id"
+    return _rows(sql, tuple(params))
+
+
+def set_model_enabled(model_pk: int, enabled: bool) -> None:
+    _exec("UPDATE llm_models SET enabled=? WHERE id=?", (1 if enabled else 0, model_pk))
+
+
+# ── Agent 分发绑定 ──
+def set_binding(agent_id: str, provider_id: str | None, model_id: str | None, note: str = "") -> dict:
+    now = _now()
+    if _one("SELECT agent_id FROM agent_bindings WHERE agent_id=?", (agent_id,)):
+        _exec("UPDATE agent_bindings SET provider_id=?,model_id=?,note=?,updated_at=? WHERE agent_id=?",
+              (provider_id, model_id, note, now, agent_id))
+    else:
+        _exec("INSERT INTO agent_bindings(agent_id,provider_id,model_id,note,updated_at) VALUES(?,?,?,?,?)",
+              (agent_id, provider_id, model_id, note, now))
+    return get_binding(agent_id)
+
+
+def get_binding(agent_id: str) -> dict | None:
+    return _one("SELECT * FROM agent_bindings WHERE agent_id=?", (agent_id,))
+
+
+def list_bindings() -> list[dict]:
+    return _rows("SELECT * FROM agent_bindings")
+
+
+def resolve_binding(agent_id: str) -> dict | None:
+    """解析某 Agent 的可用调用配置(平台已激活 + 模型已启用),返回含明文 key。"""
+    b = get_binding(agent_id)
+    if not b or not b.get("provider_id"):
+        return None
+    p = get_provider(b["provider_id"], with_key=True)
+    if not p or p.get("status") != "active" or not p.get("enabled"):
+        return None
+    return {
+        "agent_id": agent_id, "provider_id": p["id"], "kind": p["kind"],
+        "base_url": p["base_url"], "api_key": p.get("api_key", ""),
+        "model_id": b.get("model_id"),
+    }

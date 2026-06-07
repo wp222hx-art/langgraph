@@ -33,8 +33,14 @@ def node_main_agent(state: ClaimState) -> dict:
     result = handler(dict(state))
     # 合并思考链:意图节点的 think + 主Agent的 think
     merged_think = list(state.get("think", [])) + list(result.get("think", []))
+    # 出口人格化润色:该主 Agent 已分发 LLM 则用其人格重写回复,无绑定原样返回
+    raw_reply = result["reply"]
+    polished = workers.conversation_agent(agent_name, raw_reply)
+    if polished != raw_reply:
+        merged_think.append({"agent": agent_name, "action": "人格化润色",
+                             "detail": "已分发模型在线,按 Agent 人格润色回复(事实信息保持不变)"})
     return {
-        "reply": result["reply"],
+        "reply": polished,
         "cards": result.get("cards", []),
         "think": merged_think,
         "needs_human": result.get("needs_human", False),
