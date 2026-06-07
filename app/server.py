@@ -651,7 +651,24 @@ def _sse(event: str, data: dict) -> str:
 
 @app.get("/")
 def index():
-    return FileResponse("static/index.html")
+    # index.html 永不缓存:确保浏览器每次都拿到最新引用(内含静态资源版本号),彻底避免旧缓存
+    return FileResponse("static/index.html", headers={
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache", "Expires": "0",
+    })
 
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+class _NoCacheStatic(StaticFiles):
+    """静态资源强制每次校验(no-cache),配合 index.html 的 ?v= 版本号彻底杜绝旧缓存"""
+    def is_not_modified(self, response_headers, request_headers) -> bool:
+        return False  # 永不返回 304,始终回传最新内容
+
+    async def get_response(self, path, scope):
+        resp = await super().get_response(path, scope)
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
+
+
+app.mount("/static", _NoCacheStatic(directory="static"), name="static")
