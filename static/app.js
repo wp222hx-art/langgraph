@@ -452,8 +452,87 @@ function statutoryCard() {
     <p class="text-xs text-slate-500 mb-3" data-i18n="report.statutory_desc">${t('report.statutory_desc')}</p>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">${cards}</div>
     <p class="text-[11px] text-slate-400 mt-3"><i class="fas fa-circle-info"></i> <span data-i18n="report.statutory_note">${t('report.statutory_note')}</span></p>
-    <p class="text-[11px] mt-1" id="stat-export-fb"></p></div>`;
+    <p class="text-[11px] mt-1" id="stat-export-fb"></p>
+    ${importCard()}</div>`;
 }
+
+function importCard() {
+  return `<div class="import-card mt-4">
+    <div class="font-semibold text-slate-800 mb-1 flex items-center gap-2">
+      <i class="fas fa-file-import text-indigo-500"></i>
+      <span data-i18n="report.import_title">${t('report.import_title')}</span></div>
+    <p class="text-xs text-slate-500 mb-3" data-i18n="report.import_desc">${t('report.import_desc')}</p>
+    <div class="flex flex-wrap items-center gap-3">
+      <button class="import-btn-tpl" onclick="downloadImportTemplate()">
+        <i class="fas fa-download"></i> <span data-i18n="report.import_tpl">${t('report.import_tpl')}</span></button>
+      <label class="import-btn-up">
+        <i class="fas fa-upload"></i> <span data-i18n="report.import_upload">${t('report.import_upload')}</span>
+        <input type="file" id="import-file" accept=".xlsx" style="display:none" onchange="uploadRoster(this)">
+      </label>
+    </div>
+    <p class="text-[11px] mt-2" id="import-fb"></p>
+    <div id="import-preview"></div></div>`;
+}
+
+async function downloadImportTemplate() {
+  const fb = document.getElementById('import-fb');
+  if (fb) acFlash(fb, t('report.exporting'), false);
+  try {
+    const r = await fetch('/api/payroll/import/template?role=' + S.role.id).then(x => x.json());
+    if (r.denied || r.error) { if (fb) acFlash(fb, r.error || t('perm.denied'), true); return; }
+    const a = document.createElement('a');
+    a.href = r.download_url; a.download = r.filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    if (fb) acFlash(fb, `✅ ${r.title} · ${r.filename}`, false);
+  } catch (e) { if (fb) acFlash(fb, '下载失败: ' + e.message, true); }
+}
+
+async function uploadRoster(input) {
+  const fb = document.getElementById('import-fb');
+  const pv = document.getElementById('import-preview');
+  if (!input.files || !input.files[0]) return;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  fd.append('role', S.role.id);
+  if (fb) acFlash(fb, t('report.import_parsing'), false);
+  if (pv) pv.innerHTML = '';
+  try {
+    const r = await fetch('/api/payroll/import/parse', { method: 'POST', body: fd }).then(x => x.json());
+    if (r.denied || (r.error && !r.summary)) { if (fb) acFlash(fb, r.error || t('perm.denied'), true); return; }
+    const s = r.summary || { data_rows: 0, valid: 0, invalid: 0 };
+    const okMsg = r.ok ? `✅ ${t('report.import_ok')}` : `⚠️ ${t('report.import_partial')}`;
+    if (fb) acFlash(fb, `${okMsg} — ${t('report.import_rows')}: ${s.data_rows} · ${t('report.import_valid')}: ${s.valid} · ${t('report.import_invalid')}: ${s.invalid}`, !r.ok);
+    if (pv) pv.innerHTML = renderImportPreview(r);
+  } catch (e) {
+    if (fb) acFlash(fb, '解析失败: ' + e.message, true);
+  } finally { input.value = ''; }
+}
+
+function renderImportPreview(r) {
+  let html = '';
+  if (r.preview && r.preview.length) {
+    const rows = r.preview.map(p => `<tr>
+      <td>${p.emp_no}</td><td>${p.name}</td>
+      <td class="num">${(p.gross || 0).toLocaleString()}</td>
+      <td class="num">${(p.epf_emp || 0).toLocaleString()}</td>
+      <td class="num">${(p.pcb || 0).toFixed(2)}</td>
+      <td class="num">${(p.zakat || 0).toLocaleString()}</td>
+      <td class="num">${(p.net || 0).toLocaleString()}</td></tr>`).join('');
+    html += `<div class="import-pv-box"><div class="import-pv-title"><i class="fas fa-circle-check text-emerald-500"></i> ${t('report.import_preview_ok')}</div>
+      <table class="import-pv-table"><thead><tr>
+        <th>${t('report.import_col_no')}</th><th>${t('report.import_col_name')}</th>
+        <th>${t('report.import_col_gross')}</th><th>EPF</th><th>PCB</th><th>Zakat</th><th>${t('report.import_col_net')}</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  if (r.errors && r.errors.length) {
+    const errs = r.errors.map(e => `<li><b>${e.emp_no}</b> (${t('report.import_row')} ${e.row}): ${e.errors.join('；')}</li>`).join('');
+    html += `<div class="import-pv-box import-pv-err"><div class="import-pv-title"><i class="fas fa-triangle-exclamation text-rose-500"></i> ${t('report.import_preview_err')}</div>
+      <ul class="import-err-list">${errs}</ul></div>`;
+  }
+  return html;
+}
+window.downloadImportTemplate = downloadImportTemplate;
+window.uploadRoster = uploadRoster;
 
 async function exportStatutory(formId) {
   const fb = document.getElementById('stat-export-fb');

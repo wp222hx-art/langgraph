@@ -356,3 +356,28 @@ select.ac-input{ cursor:pointer; }
 .stat-form-btn.loading{ opacity:.6; pointer-events:none; }
 .stat-form-btn.loading .stat-form-dl{ animation:spin 1s linear infinite; }
 @keyframes spin{ to{ transform:rotate(360deg); } }
+
+/* ═══════════════ 员工薪资名单 Excel 导入 ═══════════════ */
+.import-card{ border:1px dashed #c7d2fe; border-radius:12px; padding:16px 16px;
+  background:linear-gradient(180deg,#f5f7ff 0%,#fbfcff 100%); }
+.import-btn-tpl,.import-btn-up{ display:inline-flex; align-items:center; gap:7px;
+  font-size:13px; font-weight:600; padding:9px 16px; border-radius:9px;
+  cursor:pointer; transition:all .16s; border:1px solid transparent; }
+.import-btn-tpl{ background:#eef2ff; color:#4338ca; border-color:#c7d2fe; }
+.import-btn-tpl:hover{ background:#e0e7ff; transform:translateY(-1px); }
+.import-btn-up{ background:#4f46e5; color:#fff; }
+.import-btn-up:hover{ background:#4338ca; transform:translateY(-1px);
+  box-shadow:0 4px 12px rgba(79,70,229,.28); }
+.import-pv-box{ margin-top:12px; background:#fff; border:1px solid #e2e8f0;
+  border-radius:11px; padding:12px 14px; }
+.import-pv-box.import-pv-err{ border-color:#fecdd3; background:#fff5f6; }
+.import-pv-title{ font-weight:700; font-size:13px; color:#0f172a;
+  margin-bottom:9px; display:flex; align-items:center; gap:7px; }
+.import-pv-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+.import-pv-table th{ background:#312e81; color:#fff; text-align:left;
+  padding:7px 10px; font-weight:600; }
+.import-pv-table td{ padding:6px 10px; border-bottom:1px solid #eef2f6; color:#334155; }
+.import-pv-table td.num{ text-align:right; font-variant-numeric:tabular-nums; }
+.import-pv-table tr:last-child td{ border-bottom:none; }
+.import-err-list{ margin:0; padding-left:18px; font-size:12.5px; color:#9f1239; line-height:1.8; }
+.import-err-list b{ color:#e11d48; }

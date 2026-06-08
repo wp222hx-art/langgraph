@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -444,6 +444,33 @@ def statutory_forms():
         "employer": payroll_data.EMPLOYER,
         "employee_count": len(payroll_data.PAYROLL_EMPLOYEES),
     }
+
+
+# ═══════ 员工薪资名单 Excel 导入 ═══════
+@app.get("/api/payroll/import/template")
+def payroll_import_template(role: str = "payroll"):
+    """下载员工薪资名单导入模板 —— 需 report.export 权限。"""
+    if not permissions.can(role, "report.export"):
+        return permissions.deny_payload(role, "report.export")
+    from app.core import payroll_import
+    try:
+        return {"ok": True, **payroll_import.build_template()}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/payroll/import/parse")
+async def payroll_import_parse(file: UploadFile = File(...), role: str = Form("payroll")):
+    """上传薪资名单 Excel，解析+校验+精确PCB试算预览 —— 需 report.export 权限。"""
+    if not permissions.can(role, "report.export"):
+        return permissions.deny_payload(role, "report.export")
+    from app.core import payroll_import
+    try:
+        content = await file.read()
+        res = payroll_import.parse_and_validate(content)
+        return res
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 @app.get("/api/report/download/{fname}")
