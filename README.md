@@ -12,12 +12,24 @@
 
 ### 🇲🇾 合规报表中心 · 马来西亚法定表格(最新)
 - **薪资三件套一键导出**(报表模块内,需 hr_admin/payroll/finance/sys_admin 权限):
-  - **工资单 Payslip** —— 含 EPF(11%)/SOCSO/EIS/PCB 法定扣除明细,逐员工独立 Sheet
+  - **工资单 Payslip** —— 含 EPF(11%)/SOCSO/EIS/PCB/Zakat 法定扣除明细,逐员工独立 Sheet
   - **EPF Borang A (KWSP 6)** —— 月度公积金缴款表,雇员/雇主缴款 + 合计 + 申报抬头
   - **EA Form (C.P.8A)** —— 年度个人薪酬扣税表,完整 Part A~F(雇员资料/总薪酬/BIK&VOLA/退休金/扣除/免税津贴)
-- **法定费率**:依 2024 马来西亚现行标准(EPF/SOCSO/EIS/PCB 累进),数据源 `app/data/payroll_data.py`
-- **API**:`POST /api/statutory/export` (form_id: payslip/epf_borang_a/ea_form) · `GET /api/statutory/forms`
-- **真生成 .xlsx**:openpyxl 专业排版(雇主抬头/法定章节/合计/免责声明)
+    - **官方 PDF 版式(HASiL C.P.8A)** —— 还原 LHDN 政府版双语(Bahasa+English)表单,蓝底分节 + 表号框 + 签署栏,每员工一页 → 可直接交付 LHDN/员工
+- **精确 PCB(MTD)计算引擎** `app/core/pcb_engine.py`:
+  - 采用 LHDN 官方电脑化计算公式 `MTD = [(P−M)×R + B − (Z+X)] / (n+1)`
+  - 2024 税阶 M/R/B 全表 + 法定宽免(个人 9000 / EPF 4000 / 配偶 4000 / 普通子女 2000 / 高教子女 8000)+ TP1 其他宽免 + Zakat 抵扣 + YTD 已缴 PCB
+- **员工薪资名单 Excel 导入** `app/core/payroll_import.py`:
+  - 下载 18 列标准模板(说明页 + 数据页 + 示例行 + 必填高亮 + 冻结表头)
+  - 上传解析 + 逐行校验(必填/IC 格式/婚姻枚举/数值范围/编号去重)
+  - 通过校验的行用精确 PCB 引擎实时试算 gross/EPF/PCB/Zakat/net 预览
+- **法定费率**:依 2024 马来西亚现行标准(EPF/SOCSO/EIS/PCB),数据源 `app/data/payroll_data.py`
+- **API**:
+  - `POST /api/statutory/export` (form_id: payslip/epf_borang_a/ea_form;`fmt: xlsx|pdf`,ea_form 支持官方 PDF)
+  - `GET /api/statutory/forms`
+  - `GET /api/payroll/import/template` (下载导入模板)
+  - `POST /api/payroll/import/parse` (上传名单解析校验预览)
+- **真生成 .xlsx / .pdf**:openpyxl 专业排版 + reportlab HASiL 官方版式
 
 ### 〇、帮助文档中心(最新)
 - **❓问号入口**:主页顶栏问号按钮一键唤起,右侧滑出抽屉(支持 ESC / 点遮罩关闭)

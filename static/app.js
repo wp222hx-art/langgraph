@@ -445,6 +445,7 @@ function statutoryCard() {
       <div class="stat-form-name">${t('report.' + f.id)}</div>
       <div class="stat-form-desc">${t('report.' + f.id + '_d')}</div>
       <i class="fas fa-download stat-form-dl"></i>
+      ${f.id === 'ea_form' ? `<span class="ea-pdf-badge" onclick="event.stopPropagation(); exportStatutory('ea_form','pdf')" title="${t('report.ea_pdf')}"><i class="fas fa-file-pdf"></i> ${t('report.ea_pdf')}</span>` : ''}
     </button>`).join('');
   return `<div class="panel p-5 lg:col-span-3 mt-1">
     <div class="font-semibold text-slate-800 mb-1 flex items-center gap-2">
@@ -534,15 +535,17 @@ function renderImportPreview(r) {
 window.downloadImportTemplate = downloadImportTemplate;
 window.uploadRoster = uploadRoster;
 
-async function exportStatutory(formId) {
+async function exportStatutory(formId, fmt) {
   const fb = document.getElementById('stat-export-fb');
   const btn = document.getElementById('stat-btn-' + formId);
   if (btn) btn.classList.add('loading');
   if (fb) acFlash(fb, t('report.exporting'), false);
   try {
+    const body = { form_id: formId, company: 'my', role: S.role.id };
+    if (fmt) { body.fmt = fmt; if (fmt === 'pdf') body.period = '2024'; }
     const r = await fetch('/api/statutory/export', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ form_id: formId, company: 'my', role: S.role.id })
+      body: JSON.stringify(body)
     }).then(x => x.json());
     if (r.denied || r.error) { if (fb) acFlash(fb, r.error || t('perm.denied'), true); return; }
     const a = document.createElement('a');

@@ -381,3 +381,11 @@ select.ac-input{ cursor:pointer; }
 .import-pv-table tr:last-child td{ border-bottom:none; }
 .import-err-list{ margin:0; padding-left:18px; font-size:12.5px; color:#9f1239; line-height:1.8; }
 .import-err-list b{ color:#e11d48; }
+
+/* EA Form 官方 PDF 角标 */
+.ea-pdf-badge{ position:absolute; bottom:12px; right:14px;
+  display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700;
+  padding:4px 10px; border-radius:7px; background:#fee2e2; color:#b91c1c;
+  border:1px solid #fecaca; cursor:pointer; transition:all .16s; }
+.ea-pdf-badge:hover{ background:#dc2626; color:#fff; border-color:#dc2626;
+  box-shadow:0 3px 10px rgba(220,38,38,.3); }

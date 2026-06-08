@@ -147,6 +147,7 @@ class StatutoryExportReq(BaseModel):
     company: str = "my"
     period: str = ""            # 工资单/缴款=YYYY-MM, EA=YYYY
     emp_no: str = ""            # 可选:单个员工(payslip)
+    fmt: str = "xlsx"           # xlsx / pdf(仅 ea_form 支持官方 PDF 版式)
     role: str = "payroll"
 
 
@@ -423,8 +424,16 @@ def statutory_export(req: StatutoryExportReq):
     """导出马来西亚国家级法定表格 —— 需 report.export 权限。真生成 .xlsx。"""
     if not permissions.can(req.role, "report.export"):
         return permissions.deny_payload(req.role, "report.export")
-    from app.core import statutory
     try:
+        # EA Form 官方 PDF 版式(HASiL C.P.8A)
+        if req.form_id == "ea_form" and req.fmt == "pdf":
+            from app.core import ea_pdf
+            year = int(req.period) if req.period.isdigit() else None
+            out = ea_pdf.build_ea_pdf(req.company, year, req.emp_no)
+            if out.get("error"):
+                return out
+            return {"ok": True, **out}
+        from app.core import statutory
         out = statutory.export_statutory(req.form_id, req.company, req.period, req.emp_no)
         if out.get("error"):
             return out
