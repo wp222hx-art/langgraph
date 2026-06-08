@@ -112,7 +112,8 @@ def _build_payslip(path: str, period: str, emp_no: str):
         deductions = [("EPF (Employee 11%) 公积金", m["epf_emp"]),
                       ("SOCSO 社险", m["socso_emp"]),
                       ("EIS 就业保险", m["eis_emp"]),
-                      ("PCB (MTD) 月度预扣税", m["pcb"])]
+                      ("PCB (MTD) 月度预扣税", m["pcb"]),
+                      ("Zakat 天课", m.get("zakat", 0))]
         for i in range(max(len(earnings), len(deductions))):
             rr = r + 1 + i
             if i < len(earnings):
@@ -242,7 +243,7 @@ def _build_ea_form(path: str, year: str):
         line(r, "2", "EPF (Employee) 雇员公积金", a["annual_epf_emp"]); r += 1
         line(r, "3", "SOCSO 社险", a["annual_socso_emp"]); r += 1
         line(r, "4", "EIS 就业保险", a["annual_eis_emp"]); r += 1
-        line(r, "5", "Zakat / Fitrah 天课", 0); r += 2
+        line(r, "5", "Zakat / Fitrah 天课", a.get("annual_zakat", 0)); r += 2
 
         section(r, "PART F — Tax-Exempt Allowances / 免税津贴"); r += 1
         line(r, "1", "Petrol / Travel Allowance 油费/交通津贴 (≤RM6,000)", min(a["annual_taxexempt"], 6000)); r += 1

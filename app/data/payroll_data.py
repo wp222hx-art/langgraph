@@ -44,53 +44,40 @@ def eis_amount(monthly_wage: float) -> float:
     base = min(monthly_wage, EIS_WAGE_CAP)
     return round(base * EIS_RATE, 2)
 
-def pcb_estimate(annual_chargeable: float) -> float:
-    """简化累进估算(月度 PCB = 年税/12)。正式以 LHDN 官方 PCB 计算器为准。"""
-    brackets = [
-        (5000, 0.00, 0),
-        (20000, 0.01, 0),
-        (35000, 0.03, 150),
-        (50000, 0.08, 600),
-        (70000, 0.13, 1800),
-        (100000, 0.21, 4400),
-        (400000, 0.24, 10700),
-        (float("inf"), 0.30, 84700),
-    ]
-    prev = 0
-    tax = 0.0
-    for cap, rate, cumtax in brackets:
-        if annual_chargeable <= cap:
-            tax = cumtax + (annual_chargeable - prev) * rate
-            break
-        prev = cap
-    return round(max(tax, 0) / 12, 2)
+# pcb_estimate 已由 app.core.pcb_engine 的精确 LHDN MTD 引擎替代(见 compute_monthly)。
 
 
 # ── 演示员工薪资档案(马来西亚) ──
-# (emp_no, name, ic_no, epf_no, socso_no, designation, dept, basic, allow_fixed, allow_taxexempt)
-#   allow_fixed       = 应税固定津贴(房补/职务津贴等)
-#   allow_taxexempt   = 免税津贴(油费/餐补,落入 EA Part F)
+# 字段:
+#   basic / allow_fixed(应税固定津贴) / allow_taxexempt(免税津贴,EA Part F) / bonus / ot
+#   marital(婚姻: single/married) / spouse_income(配偶有无收入) / children(普通子女) /
+#   children_tertiary(高教子女) / zakat_monthly(月度Zakat) / tp1_relief(TP1其他年度宽免)
+def _emp(emp_no, name, ic_no, epf_no, socso_no, designation, dept, basic,
+         allow_fixed=0, allow_taxexempt=0, bonus=0, ot=0,
+         marital="single", spouse_income=True, children=0, children_tertiary=0,
+         zakat_monthly=0.0, tp1_relief=0.0):
+    return dict(emp_no=emp_no, name=name, ic_no=ic_no, epf_no=epf_no, socso_no=socso_no,
+                designation=designation, dept=dept, basic=basic, allow_fixed=allow_fixed,
+                allow_taxexempt=allow_taxexempt, bonus=bonus, ot=ot, marital=marital,
+                spouse_income=spouse_income, children=children, children_tertiary=children_tertiary,
+                zakat_monthly=zakat_monthly, tp1_relief=tp1_relief)
+
 PAYROLL_EMPLOYEES = [
-    {"emp_no": "MY001", "name": "Ahmad Bin Ismail",  "ic_no": "880512-14-5523",
-     "epf_no": "12345601", "socso_no": "880512145523", "designation": "Engineering Manager",
-     "dept": "Technology", "basic": 9500, "allow_fixed": 1200, "allow_taxexempt": 500,
-     "bonus": 19000, "ot": 0},
-    {"emp_no": "MY002", "name": "Tan Mei Ling",      "ic_no": "910823-10-2241",
-     "epf_no": "12345602", "socso_no": "910823102241", "designation": "Senior Accountant",
-     "dept": "Finance", "basic": 6800, "allow_fixed": 800, "allow_taxexempt": 500,
-     "bonus": 13600, "ot": 0},
-    {"emp_no": "MY003", "name": "Ruby Rose A/P Raj", "ic_no": "950114-08-5566",
-     "epf_no": "12345603", "socso_no": "950114085566", "designation": "HR Executive",
-     "dept": "Human Resources", "basic": 4500, "allow_fixed": 500, "allow_taxexempt": 300,
-     "bonus": 4500, "ot": 420},
-    {"emp_no": "MY004", "name": "John Lim Wei Jie",  "ic_no": "970328-14-7789",
-     "epf_no": "12345604", "socso_no": "970328147789", "designation": "Sales Executive",
-     "dept": "Sales", "basic": 3800, "allow_fixed": 400, "allow_taxexempt": 300,
-     "bonus": 3800, "ot": 650},
-    {"emp_no": "MY005", "name": "Siti Nurhaliza",    "ic_no": "930707-05-3312",
-     "epf_no": "12345605", "socso_no": "930707053312", "designation": "Admin Assistant",
-     "dept": "Operations", "basic": 2900, "allow_fixed": 200, "allow_taxexempt": 200,
-     "bonus": 2900, "ot": 380},
+    _emp("MY001", "Ahmad Bin Ismail",  "880512-14-5523", "12345601", "880512145523",
+         "Engineering Manager", "Technology", 9500, 1200, 500, 19000, 0,
+         marital="married", spouse_income=False, children=2, zakat_monthly=150),
+    _emp("MY002", "Tan Mei Ling",      "910823-10-2241", "12345602", "910823102241",
+         "Senior Accountant", "Finance", 6800, 800, 500, 13600, 0,
+         marital="married", spouse_income=True, children=1),
+    _emp("MY003", "Ruby Rose A/P Raj", "950114-08-5566", "12345603", "950114085566",
+         "HR Executive", "Human Resources", 4500, 500, 300, 4500, 420,
+         marital="single", children=0),
+    _emp("MY004", "John Lim Wei Jie",  "970328-14-7789", "12345604", "970328147789",
+         "Sales Executive", "Sales", 3800, 400, 300, 3800, 650,
+         marital="married", spouse_income=True, children=1, children_tertiary=1),
+    _emp("MY005", "Siti Nurhaliza",    "930707-05-3312", "12345605", "930707053312",
+         "Admin Assistant", "Operations", 2900, 200, 200, 2900, 380,
+         marital="single", children=0),
 ]
 
 
@@ -110,11 +97,23 @@ def compute_monthly(emp: dict) -> dict:
     eis_emp = eis_amount(gross_taxable)
     eis_er = eis_amount(gross_taxable)
 
-    # 估算年度应税(简化: 月应税×12 − EPF年度减免上限4000 − 个人减免9000)
-    annual_chargeable = max(gross_taxable * 12 - 4000 - 9000, 0)
-    pcb = pcb_estimate(annual_chargeable)
+    # 精确 PCB —— 调用 LHDN MTD 官方公式引擎
+    from app.core import pcb_engine
+    mtd = pcb_engine.compute_mtd_from_monthly(
+        monthly_taxable=gross_taxable,
+        monthly_epf=epf_emp,
+        spouse_no_income=(emp.get("marital") == "married" and not emp.get("spouse_income", True)),
+        children=emp.get("children", 0),
+        children_tertiary=emp.get("children_tertiary", 0),
+        tp1_other_relief=emp.get("tp1_relief", 0.0),
+        zakat_paid_ytd=emp.get("zakat_monthly", 0.0) * 11,   # 前11月累计(简化)
+        remaining_months=12,
+    )
+    pcb = mtd["mtd_monthly"]
+    zakat = round(emp.get("zakat_monthly", 0.0), 2)
+    # PCB 可被 Zakat 抵扣后实缴(MTD 公式已扣 Z),此处 pcb 为净额
 
-    deductions = epf_emp + socso_emp + eis_emp + pcb
+    deductions = epf_emp + socso_emp + eis_emp + pcb + zakat
     net = round(gross_total - deductions, 2)
     return {
         **emp,
@@ -123,7 +122,8 @@ def compute_monthly(emp: dict) -> dict:
         "epf_emp": epf_emp, "epf_er": epf_er,
         "socso_emp": socso_emp, "socso_er": socso_er,
         "eis_emp": eis_emp, "eis_er": eis_er,
-        "pcb": pcb,
+        "pcb": pcb, "zakat": zakat,
+        "pcb_detail": mtd,
         "total_deduction": round(deductions, 2),
         "net_pay": net,
     }
@@ -146,4 +146,6 @@ def compute_annual(emp: dict) -> dict:
         "annual_socso_emp": round(m["socso_emp"] * months, 2),
         "annual_eis_emp": round(m["eis_emp"] * months, 2),
         "annual_pcb": round(m["pcb"] * months, 2),
+        "annual_zakat": round(m.get("zakat", 0) * months, 2),
+        "pcb_detail": m.get("pcb_detail", {}),
     }
