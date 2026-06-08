@@ -129,6 +129,10 @@ const I18N = {
     report: {
       export_excel: '导出 Excel', export_ppt: '导出 PPT', exporting: '正在生成报表…', export_done: '导出完成',
       no_perm: '当前身份无权导出报表', ai_insight: 'AI 洞察', deep_analysis: '对话式深度分析',
+      statutory_title: '🇲🇾 马来西亚法定合规表格', statutory_desc: '一键生成符合 LHDN / KWSP / PERKESO 国家级要求的法定表格',
+      payslip: '工资单 Payslip', epf_borang_a: 'EPF Borang A', ea_form: 'EA Form (C.P.8A)',
+      payslip_d: '含 EPF/SOCSO/EIS/PCB 法定扣除明细', epf_borang_a_d: '月度公积金缴款表 (KWSP 6)', ea_form_d: '年度个人薪酬扣税表 · Part A~F',
+      statutory_note: '依现行法定费率生成,正式申报请以官方系统为准',
     },
     ct: { code: '编码', name: '名称', name_en: '英文名', grp: '分组', limit: '限额', need_invoice: '需发票' },
   },
@@ -248,6 +252,10 @@ const I18N = {
     report: {
       export_excel: 'Export Excel', export_ppt: 'Export PPT', exporting: 'Generating report…', export_done: 'Export done',
       no_perm: 'Your role cannot export reports', ai_insight: 'AI Insight', deep_analysis: 'Conversational deep analysis',
+      statutory_title: '🇲🇾 Malaysia Statutory Forms', statutory_desc: 'One-click generate LHDN / KWSP / PERKESO compliant statutory forms',
+      payslip: 'Payslip', epf_borang_a: 'EPF Borang A', ea_form: 'EA Form (C.P.8A)',
+      payslip_d: 'With EPF/SOCSO/EIS/PCB statutory deductions', epf_borang_a_d: 'Monthly EPF contribution (KWSP 6)', ea_form_d: 'Annual remuneration statement · Part A~F',
+      statutory_note: 'Generated per current statutory rates; file via official systems for submission',
     },
     ct: { code: 'Code', name: 'Name', name_en: 'English name', grp: 'Group', limit: 'Limit', need_invoice: 'Invoice req.' },
   },

@@ -10,6 +10,15 @@
 
 ## ✅ 已完成功能
 
+### 🇲🇾 合规报表中心 · 马来西亚法定表格(最新)
+- **薪资三件套一键导出**(报表模块内,需 hr_admin/payroll/finance/sys_admin 权限):
+  - **工资单 Payslip** —— 含 EPF(11%)/SOCSO/EIS/PCB 法定扣除明细,逐员工独立 Sheet
+  - **EPF Borang A (KWSP 6)** —— 月度公积金缴款表,雇员/雇主缴款 + 合计 + 申报抬头
+  - **EA Form (C.P.8A)** —— 年度个人薪酬扣税表,完整 Part A~F(雇员资料/总薪酬/BIK&VOLA/退休金/扣除/免税津贴)
+- **法定费率**:依 2024 马来西亚现行标准(EPF/SOCSO/EIS/PCB 累进),数据源 `app/data/payroll_data.py`
+- **API**:`POST /api/statutory/export` (form_id: payslip/epf_borang_a/ea_form) · `GET /api/statutory/forms`
+- **真生成 .xlsx**:openpyxl 专业排版(雇主抬头/法定章节/合计/免责声明)
+
 ### 〇、帮助文档中心(最新)
 - **❓问号入口**:主页顶栏问号按钮一键唤起,右侧滑出抽屉(支持 ESC / 点遮罩关闭)
 - **中英双语**:跟随全局语言开关实时切换并重渲染

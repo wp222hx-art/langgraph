@@ -428,7 +428,53 @@ function reportView(m) {
     <div class="panel p-5"><div class="font-semibold text-slate-800 mb-2"><i class="fas fa-lightbulb text-amber-400"></i> ${t('report.ai_insight')}</div>
       <p class="text-sm text-slate-600 leading-relaxed">${m.insight}</p>
       <button class="btn btn-ai w-full mt-4 justify-center" onclick="openAI('InsightOracle','分析${m.title}')"><i class="fas fa-robot"></i> ${t('report.deep_analysis')}</button>
-      ${exportBtns}</div></div>`;
+      ${exportBtns}</div>
+    ${canExport ? statutoryCard() : ''}</div>`;
+}
+
+// 🇲🇾 马来西亚法定合规表格卡片
+function statutoryCard() {
+  const forms = [
+    { id: 'payslip', icon: 'fa-file-invoice-dollar', color: 'emerald' },
+    { id: 'epf_borang_a', icon: 'fa-piggy-bank', color: 'blue' },
+    { id: 'ea_form', icon: 'fa-file-contract', color: 'orange' },
+  ];
+  const cards = forms.map(f => `
+    <button class="stat-form-btn" onclick="exportStatutory('${f.id}')" id="stat-btn-${f.id}">
+      <i class="fas ${f.icon} text-${f.color}-500 text-xl"></i>
+      <div class="stat-form-name">${t('report.' + f.id)}</div>
+      <div class="stat-form-desc">${t('report.' + f.id + '_d')}</div>
+      <i class="fas fa-download stat-form-dl"></i>
+    </button>`).join('');
+  return `<div class="panel p-5 lg:col-span-3 mt-1">
+    <div class="font-semibold text-slate-800 mb-1 flex items-center gap-2">
+      <span data-i18n="report.statutory_title">${t('report.statutory_title')}</span></div>
+    <p class="text-xs text-slate-500 mb-3" data-i18n="report.statutory_desc">${t('report.statutory_desc')}</p>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">${cards}</div>
+    <p class="text-[11px] text-slate-400 mt-3"><i class="fas fa-circle-info"></i> <span data-i18n="report.statutory_note">${t('report.statutory_note')}</span></p>
+    <p class="text-[11px] mt-1" id="stat-export-fb"></p></div>`;
+}
+
+async function exportStatutory(formId) {
+  const fb = document.getElementById('stat-export-fb');
+  const btn = document.getElementById('stat-btn-' + formId);
+  if (btn) btn.classList.add('loading');
+  if (fb) acFlash(fb, t('report.exporting'), false);
+  try {
+    const r = await fetch('/api/statutory/export', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ form_id: formId, company: 'my', role: S.role.id })
+    }).then(x => x.json());
+    if (r.denied || r.error) { if (fb) acFlash(fb, r.error || t('perm.denied'), true); return; }
+    const a = document.createElement('a');
+    a.href = r.download_url; a.download = r.filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    if (fb) acFlash(fb, `✅ ${r.title} · ${r.filename} (${(r.size / 1024).toFixed(1)}KB)`, false);
+  } catch (e) {
+    if (fb) acFlash(fb, '导出失败: ' + e.message, true);
+  } finally {
+    if (btn) btn.classList.remove('loading');
+  }
 }
 async function exportReport(fmt) {
   const fb = document.getElementById('rpt-export-fb');

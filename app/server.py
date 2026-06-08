@@ -142,6 +142,14 @@ class ReportExportReq(BaseModel):
     role: str = "finance"
 
 
+class StatutoryExportReq(BaseModel):
+    form_id: str = "payslip"    # payslip / epf_borang_a / ea_form
+    company: str = "my"
+    period: str = ""            # 工资单/缴款=YYYY-MM, EA=YYYY
+    emp_no: str = ""            # 可选:单个员工(payslip)
+    role: str = "payroll"
+
+
 @app.get("/api/agents")
 def get_agents():
     return {"agents": AGENTS}
@@ -407,6 +415,35 @@ def report_export(req: ReportExportReq):
         return {"ok": True, **out}
     except Exception as e:
         return {"error": str(e)}
+
+
+# ═══════ 马来西亚法定合规表格(Payslip / EPF Borang A / EA Form) ═══════
+@app.post("/api/statutory/export")
+def statutory_export(req: StatutoryExportReq):
+    """导出马来西亚国家级法定表格 —— 需 report.export 权限。真生成 .xlsx。"""
+    if not permissions.can(req.role, "report.export"):
+        return permissions.deny_payload(req.role, "report.export")
+    from app.core import statutory
+    try:
+        out = statutory.export_statutory(req.form_id, req.company, req.period, req.emp_no)
+        if out.get("error"):
+            return out
+        return {"ok": True, **out}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/statutory/forms")
+def statutory_forms():
+    """法定表格清单(供前端渲染)。"""
+    from app.core import statutory
+    from app.data import payroll_data
+    return {
+        "forms": [{"id": k, "name_zh": v[0], "name_en": v[1]}
+                  for k, v in statutory.STATUTORY_FORMS.items()],
+        "employer": payroll_data.EMPLOYER,
+        "employee_count": len(payroll_data.PAYROLL_EMPLOYEES),
+    }
 
 
 @app.get("/api/report/download/{fname}")
