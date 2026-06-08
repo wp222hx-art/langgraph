@@ -26,6 +26,9 @@ const I18N = {
       online: '在线', agents: '智能体', active: '活跃', modules: '模块', running: '运行',
       latency: '时延', tip_active: '运行中',
     },
+    help: {
+      open: '帮助中心', title: '帮助中心', subtitle: '使用指南 · 系统介绍 · 常见问题',
+    },
     aiconf: {
       title: 'AI 配置后台', subtitle: '统一管理 API 平台、模型与 Agent 分发 · Key 加密存储,绝不外泄前端',
       tab_basic: '① 基础配置', tab_model: '② 模型管理', tab_dispatch: '③ 分发应用',
@@ -145,6 +148,9 @@ const I18N = {
     core: {
       online: 'ONLINE', agents: 'Agents', active: 'active', modules: 'Modules', running: 'running',
       latency: 'Latency', tip_active: 'running',
+    },
+    help: {
+      open: 'Help Center', title: 'Help Center', subtitle: 'User Guide · System Overview · FAQ',
     },
     aiconf: {
       title: 'AI Configuration Console', subtitle: 'Manage API providers, models & agent dispatch · Keys encrypted, never exposed to frontend',
