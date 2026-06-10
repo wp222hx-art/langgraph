@@ -389,3 +389,111 @@ select.ac-input{ cursor:pointer; }
   border:1px solid #fecaca; cursor:pointer; transition:all .16s; }
 .ea-pdf-badge:hover{ background:#dc2626; color:#fff; border-color:#dc2626;
   box-shadow:0 3px 10px rgba(220,38,38,.3); }
+
+/* ══════════════ 移动端用户模式(employee) ══════════════ */
+/* 桌面预览：把 body 当成一台手机,居中 430px 外框 + 深色衬底;真机自动全屏 */
+body.mode-mobile{
+  background:#0f172a;
+  display:flex; justify-content:center; align-items:stretch;
+}
+body.mode-mobile #sidebar{ display:none !important; }
+body.mode-mobile #sidebar-mask{ display:none !important; }
+
+/* 手机外框:topbar / workspace 都收进 430px 居中容器 */
+body.mode-mobile #topbar,
+body.mode-mobile #workspace{
+  left:50% !important; right:auto !important; transform:translateX(-50%);
+  width:100%; max-width:430px;
+}
+body.mode-mobile #topbar{
+  border-radius:26px 26px 0 0; border:none;
+  background:linear-gradient(135deg,#0d9488,#0f766e); color:#fff;
+  box-shadow:none;
+}
+body.mode-mobile #topbar *{ color:#fff !important; }
+
+body.mode-mobile #workspace{
+  top:56px; bottom:0;
+  background:#f1f5f9;
+  box-shadow:0 0 0 1px rgba(0,0,0,.04), 0 24px 60px rgba(0,0,0,.45);
+  border-radius:0 0 26px 26px;
+  overflow:hidden;
+}
+body.mode-mobile #view{
+  padding:14px !important; max-width:none !important;
+  padding-bottom:84px !important;   /* 给底部 Tab 让位 */
+  height:100%; overflow-y:auto; -webkit-overflow-scrolling:touch;
+}
+/* 移动端卡片更紧凑、可点区域更大 */
+body.mode-mobile .kpi-card{ padding:15px; border-radius:14px; }
+body.mode-mobile .panel{ border-radius:14px; }
+body.mode-mobile .chart-box{ height:220px; }
+
+/* 真机(<=480px):占满全屏,去掉外框圆角阴影 */
+@media (max-width:480px){
+  body.mode-mobile{ background:#f1f5f9; }
+  body.mode-mobile #topbar{ border-radius:0; }
+  body.mode-mobile #workspace{ border-radius:0; box-shadow:none; max-width:none; }
+}
+
+/* ── 底部 Tab Bar ── */
+#mobile-tabbar{
+  position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+  width:100%; max-width:430px; height:64px; z-index:60;
+  display:flex; align-items:stretch;
+  background:rgba(255,255,255,.96); backdrop-filter:blur(10px);
+  border-top:1px solid #e8edf3;
+  border-radius:0 0 26px 26px;
+  box-shadow:0 -2px 16px rgba(0,0,0,.05);
+  padding-bottom:env(safe-area-inset-bottom,0);
+}
+@media (max-width:480px){ #mobile-tabbar{ border-radius:0; max-width:none; } }
+.mtab{
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:3px; border:none; background:none; cursor:pointer;
+  color:#94a3b8; font-size:11px; transition:color .14s;
+}
+.mtab i{ font-size:19px; }
+.mtab span{ line-height:1; }
+.mtab:active{ transform:scale(.94); }
+.mtab.active{ color:#0d9488; font-weight:600; }
+/* AI 助手:凸起的圆形主按钮 */
+.mtab-ai{ color:#fff; }
+.mtab-ai i{
+  width:46px; height:46px; margin-top:-22px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(135deg,#0d9488,#0891b2);
+  box-shadow:0 6px 16px rgba(13,148,136,.45);
+  font-size:18px;
+}
+.mtab-ai span{ color:#0d9488; font-weight:600; margin-top:2px; }
+.mtab-ai:active i{ transform:scale(.92); }
+
+/* ── "我的"页 ── */
+.me-page{ animation:fade-in .2s ease; }
+.me-hero{
+  background:linear-gradient(135deg,#0d9488,#0891b2);
+  margin:-14px -14px 16px; padding:30px 18px 26px;
+  border-radius:0 0 22px 22px; color:#fff; text-align:center;
+}
+.me-avatar{
+  width:74px; height:74px; border-radius:50%; margin:0 auto 12px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:30px; color:#fff;
+  box-shadow:0 6px 18px rgba(0,0,0,.18); border:3px solid rgba(255,255,255,.35);
+}
+.me-name{ font-size:19px; font-weight:700; }
+.me-sub{ font-size:13px; opacity:.9; margin-top:4px; }
+.me-list{
+  background:#fff; border:1px solid #e8edf3; border-radius:14px; overflow:hidden;
+}
+.me-item{
+  display:flex; align-items:center; gap:13px; padding:15px 16px;
+  border-bottom:1px solid #f1f5f9; cursor:pointer; font-size:14.5px; color:#334155;
+  transition:background .12s;
+}
+.me-item:last-child{ border-bottom:none; }
+.me-item:active{ background:#f8fafc; }
+.me-item > i:first-child{ width:22px; text-align:center; font-size:17px; }
+.me-item > span{ flex:1; }
+.me-arr{ color:#cbd5e1; font-size:13px; }

@@ -4,6 +4,19 @@ const $$ = s => document.querySelectorAll(s);
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
 
+// 统一 API 辅助:GET 直接传 url;POST/PUT/DELETE 传 body 对象(自动带 JSON 头并解析)
+async function api(url, body, method) {
+  const opt = { method: method || (body ? 'POST' : 'GET') };
+  if (body) { opt.headers = { 'Content-Type': 'application/json' }; opt.body = JSON.stringify(body); }
+  return (await fetch(url, opt)).json();
+}
+// 触发文件下载(供导出/模板等复用)
+function dl(url, name) {
+  const a = document.createElement('a');
+  a.href = url; a.download = name || '';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
 const S = {           // 全局状态
   groups: [], roles: [], languages: [], nav: [], agents: [],
   group: null, company: null, role: null,
@@ -222,6 +235,7 @@ function toggleGroup(id) {
 function go(navId) {
   S.currentNav = navId;
   $$('[data-nav]').forEach(el => el.classList.toggle('active', el.dataset.nav === navId));
+  if ($('#mobile-tabbar')) renderTabbar();
   const view = $('#view');
   view.classList.remove('fade-in'); void view.offsetWidth; view.classList.add('fade-in');
   if (navId === 'dashboard') return renderDashboard();
@@ -479,11 +493,9 @@ async function downloadImportTemplate() {
   const fb = document.getElementById('import-fb');
   if (fb) acFlash(fb, t('report.exporting'), false);
   try {
-    const r = await fetch('/api/payroll/import/template?role=' + S.role.id).then(x => x.json());
+    const r = await api('/api/payroll/import/template?role=' + S.role.id);
     if (r.denied || r.error) { if (fb) acFlash(fb, r.error || t('perm.denied'), true); return; }
-    const a = document.createElement('a');
-    a.href = r.download_url; a.download = r.filename;
-    document.body.appendChild(a); a.click(); a.remove();
+    dl(r.download_url, r.filename);
     if (fb) acFlash(fb, `✅ ${r.title} · ${r.filename}`, false);
   } catch (e) { if (fb) acFlash(fb, '下载失败: ' + e.message, true); }
 }
@@ -543,14 +555,9 @@ async function exportStatutory(formId, fmt) {
   try {
     const body = { form_id: formId, company: 'my', role: S.role.id };
     if (fmt) { body.fmt = fmt; if (fmt === 'pdf') body.period = '2024'; }
-    const r = await fetch('/api/statutory/export', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    }).then(x => x.json());
+    const r = await api('/api/statutory/export', body);
     if (r.denied || r.error) { if (fb) acFlash(fb, r.error || t('perm.denied'), true); return; }
-    const a = document.createElement('a');
-    a.href = r.download_url; a.download = r.filename;
-    document.body.appendChild(a); a.click(); a.remove();
+    dl(r.download_url, r.filename);
     if (fb) acFlash(fb, `✅ ${r.title} · ${r.filename} (${(r.size / 1024).toFixed(1)}KB)`, false);
   } catch (e) {
     if (fb) acFlash(fb, '导出失败: ' + e.message, true);
@@ -562,13 +569,9 @@ async function exportReport(fmt) {
   const fb = document.getElementById('rpt-export-fb');
   if (fb) acFlash(fb, t('report.exporting'), false);
   try {
-    const r = await fetch('/api/report/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company: S.company.id, module_id: S.currentNav, fmt, role: S.role.id }) }).then(x => x.json());
+    const r = await api('/api/report/export', { company: S.company.id, module_id: S.currentNav, fmt, role: S.role.id });
     if (r.denied || r.error) { if (fb) acFlash(fb, r.error || t('perm.denied'), true); return; }
-    // 真下载:用隐藏 a 触发
-    const a = document.createElement('a');
-    a.href = r.download_url; a.download = r.filename;
-    document.body.appendChild(a); a.click(); a.remove();
+    dl(r.download_url, r.filename);
     if (fb) acFlash(fb, `✅ ${t('report.export_done')} · ${r.filename} (${(r.size / 1024).toFixed(1)}KB)`, false);
   } catch (e) { if (fb) acFlash(fb, t('claim.load_err'), true); }
 }
@@ -678,8 +681,7 @@ async function submitBalanceAdjust() {
   if (kind === '转移' && (!to_emp_id || to_emp_id === emp_id)) { acFlash(fb, t('balance.need_target'), true); return; }
   acFlash(fb, t('claim.submitting'), false);
   try {
-    const r = await fetch('/api/balance/adjust', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company: S.company.id, emp_id, kind, amount, reason, to_emp_id, role: S.role.id }) }).then(x => x.json());
+    const r = await api('/api/balance/adjust', { company: S.company.id, emp_id, kind, amount, reason, to_emp_id, role: S.role.id });
     if (r.denied || r.error) { acFlash(fb, r.error || t('perm.denied'), true); return; }
     const bal = r.balance || {};
     acFlash(fb, `✅ ${t('balance.done')} · ${r.emp} ${kind} ${amount} → ${t('balance.remaining')}: ${bal.remaining}`, false);
@@ -719,8 +721,7 @@ async function addFamily() {
   if (!name.trim()) { acFlash(fb, t('fam.need_name'), true); return; }
   acFlash(fb, t('claim.submitting'), false);
   try {
-    const r = await fetch('/api/family', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company: S.company.id, relation, name, role: S.role.id }) }).then(x => x.json());
+    const r = await api('/api/family', { company: S.company.id, relation, name, role: S.role.id });
     if (r.denied || r.error) { acFlash(fb, r.error || t('perm.denied'), true); return; }
     acFlash(fb, '✅ ' + t('fam.added') + ' ' + (r.name || name), false);
     document.getElementById('fam-name').value = '';
@@ -808,16 +809,13 @@ async function submitCrud() {
       };
       // 编辑模式 → PUT;新建模式 → POST
       if (crud.edit_code) {
-        r = await fetch(`/api/claim_types/${encodeURIComponent(crud.edit_code)}`, { method: 'PUT',
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ctBody) }).then(x => x.json());
+        r = await api(`/api/claim_types/${encodeURIComponent(crud.edit_code)}`, ctBody, 'PUT');
       } else {
-        r = await fetch('/api/claim_types', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(ctBody) }).then(x => x.json());
+        r = await api('/api/claim_types', ctBody);
       }
     } else {
       // 其它表格模块 → 通用 module_records
-      r = await fetch('/api/module_records', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ module_id: crud.module_id, company: S.company.id, payload: vals, role: S.role.id }) }).then(x => x.json());
+      r = await api('/api/module_records', { module_id: crud.module_id, company: S.company.id, payload: vals, role: S.role.id });
     }
     if (r.error) { acFlash(fb, r.error, true); return; }
     acFlash(fb, '✅ ' + t('crud.saved'), false);
@@ -854,9 +852,9 @@ async function deleteRow(kind, key) {
   try {
     let r;
     if (kind === 'type') {
-      r = await fetch(`/api/claim_types/${encodeURIComponent(key)}?company=${S.company.id}&role=${S.role.id}`, { method: 'DELETE' }).then(x => x.json());
+      r = await api(`/api/claim_types/${encodeURIComponent(key)}?company=${S.company.id}&role=${S.role.id}`, null, 'DELETE');
     } else {
-      r = await fetch(`/api/module_records/${key}?company=${S.company.id}&role=${S.role.id}`, { method: 'DELETE' }).then(x => x.json());
+      r = await api(`/api/module_records/${key}?company=${S.company.id}&role=${S.role.id}`, null, 'DELETE');
     }
     if (r.error) { toast(r.error, true); return; }
     toast(t('crud.deleted'));
@@ -870,8 +868,7 @@ async function decideClaim(cid, status) {
   if (!cid) return;
   if (fb) acFlash(fb, t('claim.submitting'), false);
   try {
-    const r = await fetch(`/api/claims/${encodeURIComponent(cid)}/decide`, { method: 'POST',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, role: S.role.id }) }).then(x => x.json());
+    const r = await api(`/api/claims/${encodeURIComponent(cid)}/decide`, { status, role: S.role.id });
     if (r.error) { if (fb) acFlash(fb, r.error, true); return; }
     const word = status === 'approved' ? t('crud.approved') : t('crud.rejected');
     if (fb) acFlash(fb, `✅ ${cid} ${word}`, false);
@@ -882,9 +879,7 @@ async function batchApprove() {
   const fb = document.getElementById('approval-feedback');
   if (fb) acFlash(fb, t('claim.submitting'), false);
   try {
-    const r = await fetch('/api/claims/batch_decide', { method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company: S.company.id, status: 'approved', risk_level: '低', role: S.role.id }) }).then(x => x.json());
+    const r = await api('/api/claims/batch_decide', { company: S.company.id, status: 'approved', risk_level: '低', role: S.role.id });
     if (r.denied || r.error) { if (fb) acFlash(fb, r.error || t('perm.denied'), true); return; }
     if (fb) acFlash(fb, `✅ ${t('crud.batch_done')} ${r.affected || 0}`, false);
     go(S.currentNav);
@@ -967,7 +962,7 @@ async function submitClaim() {
   acFlash(fb, t('claim.submitting'), false);
   try {
     payload.role = S.role.id;
-    const r = await fetch('/api/claims', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(x => x.json());
+    const r = await api('/api/claims', payload);
     if (r.error) { acFlash(fb, r.error, true); return; }
     const risk = r.risk || {}; const cl = r.claim || {};
     acFlash(fb, `✅ ${t('claim.submitted')} ${cl.id} · ${t('claim.c_risk')} ${risk.score}(${risk.level}) · ${t('claim.tax')} ${r.tax_amount}`, false);
@@ -985,8 +980,7 @@ async function ocrUpload(ev) {
   reader.onload = async () => {
     const b64 = String(reader.result);
     try {
-      const r = await fetch('/api/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company: S.company.id, image_b64: b64, mime: file.type || 'image/jpeg' }) }).then(x => x.json());
+      const r = await api('/api/ocr', { company: S.company.id, image_b64: b64, mime: file.type || 'image/jpeg' });
       const ext = r.extracted || {};
       if (ext.type_code) { const s = document.getElementById('cf-type'); if (s) s.value = ext.type_code; }
       if (ext.merchant) { const e = document.getElementById('cf-merchant'); if (e) e.value = ext.merchant; }
@@ -1090,10 +1084,65 @@ function showRolePop(e) {
 }
 function switchRole(id) {
   S.role = S.roles.find(r => r.id === id);
+  applyMode();                       // 用户模式 → 移动端外壳;管理角色 → 桌面工作台
   renderTopbar(); renderNav(); closePopover();
   if (!S.role.menus.includes(S.currentNav)) go('dashboard'); else go(S.currentNav);
 }
 window.switchRole = switchRole;
+
+// ════════ 移动端用户模式 ════════
+// 普通员工(employee)= 移动端 App 体验;其余为桌面管理工作台
+const MOBILE_ROLES = ['employee'];
+function isMobileMode() { return S.role && MOBILE_ROLES.includes(S.role.id); }
+function applyMode() {
+  const on = isMobileMode();
+  document.body.classList.toggle('mode-mobile', on);
+  let bar = $('#mobile-tabbar');
+  if (on) { if (!bar) buildTabbar(); renderTabbar(); }
+  else if (bar) bar.remove();
+}
+// 底部 Tab(员工自助:首页/报销/我的)
+const MOBILE_TABS = [
+  { nav: 'dashboard', icon: 'fa-house', key: 'm.tab_home' },
+  { nav: 'my', icon: 'fa-receipt', key: 'm.tab_claim' },
+  { nav: '__me', icon: 'fa-user', key: 'm.tab_me' },
+];
+function buildTabbar() {
+  const bar = document.createElement('nav');
+  bar.id = 'mobile-tabbar';
+  document.body.appendChild(bar);
+}
+function renderTabbar() {
+  const bar = $('#mobile-tabbar'); if (!bar) return;
+  bar.innerHTML = MOBILE_TABS.map(tb => {
+    const active = (tb.nav === '__me') ? (S.currentNav === '__me') : (S.currentNav === tb.nav);
+    return `<button class="mtab ${active ? 'active' : ''}" onclick="mobileGo('${tb.nav}')">
+      <i class="fas ${tb.icon}"></i><span>${t(tb.key)}</span></button>`;
+  }).join('') +
+    `<button class="mtab mtab-ai" onclick="openAI('ClaimMate')"><i class="fas fa-robot"></i><span>${t('m.tab_ai')}</span></button>`;
+}
+function mobileGo(nav) {
+  if (nav === '__me') { S.currentNav = '__me'; renderMeView(); renderTabbar(); return; }
+  go(nav); renderTabbar();
+}
+window.mobileGo = mobileGo;
+// 「我的」页(移动端个人中心)
+function renderMeView() {
+  const r = S.role, c = S.company;
+  $('#view').innerHTML = `<div class="me-page">
+    <div class="me-hero">
+      <div class="me-avatar" style="background:${r.color}"><i class="fas ${r.icon}"></i></div>
+      <div class="me-name">${nameOf(r)}</div>
+      <div class="me-sub">${c.flag} ${nameOf(c)}</div>
+    </div>
+    <div class="me-list">
+      <div class="me-item" onclick="openAI('ClaimMate','我还能报多少额度?')"><i class="fas fa-wallet text-emerald-500"></i><span>${t('m.me_balance')}</span><i class="fas fa-chevron-right me-arr"></i></div>
+      <div class="me-item" onclick="mobileGo('my')"><i class="fas fa-receipt text-teal-500"></i><span>${t('m.me_claims')}</span><i class="fas fa-chevron-right me-arr"></i></div>
+      <div class="me-item" onclick="openAI('ClaimMate','帮我登记家属信息')"><i class="fas fa-users text-indigo-500"></i><span>${t('m.me_family')}</span><i class="fas fa-chevron-right me-arr"></i></div>
+      <div class="me-item" onclick="$('#help-btn').click()"><i class="fas fa-circle-question text-slate-400"></i><span>${t('help.open')}</span><i class="fas fa-chevron-right me-arr"></i></div>
+      <div class="me-item" onclick="$('#role-switch').click()"><i class="fas fa-right-left text-slate-400"></i><span>${t('m.me_switch')}</span><i class="fas fa-chevron-right me-arr"></i></div>
+    </div></div>`;
+}
 
 function showLangPop(e) {
   const html = S.languages.map(l => `<div class="pop-item ${l.code === S.lang ? 'active' : ''}" onclick="switchLang('${l.code}')">
@@ -1529,29 +1578,29 @@ async function acSubmitProvider() {
   };
   if (!preset && !payload.id && !payload.name) { acToast('请填平台名称或选择预设', 'err'); return; }
   if (!preset) payload.id = payload.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  await fetch('/api/admin/providers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => r.json());
+  await api('/api/admin/providers', payload);
   acToast(tt('submit') + ' ✅'); renderAIConfig();
 }
 
 async function acVerify(pid) {
   acToast(tt('verifying'));
-  const r = await fetch(`/api/admin/providers/${pid}/verify`, { method: 'POST' }).then(r => r.json());
+  const r = await api(`/api/admin/providers/${pid}/verify`, {});
   acToast(r.verify.ok ? `${tt('verify_ok')} ${r.verify.models_pulled || 0} models` : r.verify.msg, r.verify.ok ? 'ok' : 'err');
   renderAIConfig();
 }
 async function acActivate(pid, on) {
-  const r = await fetch(`/api/admin/providers/${pid}/activate?on=${on}`, { method: 'POST' }).then(r => r.json());
+  const r = await api(`/api/admin/providers/${pid}/activate?on=${on}`, {});
   if (r.error) acToast(r.error, 'err'); else acToast('✅'); renderAIConfig();
 }
 async function acPull(pid) {
   acToast(tt('pulling'));
-  const r = await fetch(`/api/admin/providers/${pid}/models/pull`, { method: 'POST' }).then(r => r.json());
+  const r = await api(`/api/admin/providers/${pid}/models/pull`, {});
   acToast(r.error ? r.error : `${r.count} models`, r.error ? 'err' : 'ok');
   AC.tab = 'model'; AC.filterProvider = pid; renderAIConfig();
 }
 async function acDelProvider(pid) {
   if (!confirm(tt('confirm_del'))) return;
-  await fetch(`/api/admin/providers/${pid}`, { method: 'DELETE' });
+  await api(`/api/admin/providers/${pid}`, null, 'DELETE');
   acToast('🗑️'); renderAIConfig();
 }
 
@@ -1586,7 +1635,7 @@ async function acRenderModels(body) {
 }
 function acFilterModels(pid) { AC.filterProvider = pid; acRenderModels($('#ac-body')); }
 async function acToggleModel(pk, on) {
-  await fetch('/api/admin/models/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model_pk: pk, enabled: on }) });
+  await api('/api/admin/models/toggle', { model_pk: pk, enabled: on });
   acToast(on ? tt('enabled') + ' ✅' : tt('disabled')); acRenderModels($('#ac-body'));
   fetch('/api/admin/status').then(r => r.json()).then(s => { AC.status = s; });
 }
@@ -1648,7 +1697,7 @@ async function acSaveBinding(agentId) {
   const val = sel.value;
   let provider_id = null, model_id = null;
   if (val) { [provider_id, model_id] = val.split('|'); }
-  await fetch('/api/admin/bindings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent_id: agentId, provider_id, model_id }) });
+  await api('/api/admin/bindings', { agent_id: agentId, provider_id, model_id });
   acToast(model_id ? tt('bound_ok') : tt('unbound')); acRenderDispatch($('#ac-body'));
   fetch('/api/admin/status').then(r => r.json()).then(s => { AC.status = s; });
 }

@@ -13,6 +13,11 @@ const I18N = {
   // ─────────────── 简体中文(基准语言) ───────────────
   zh: {
     app: { title: 'Paydaes ClaimGPT · 集团级 AI 报销智能平台', group: 'Paydaes 集团' },
+    m: {
+      tab_home: '首页', tab_claim: '报销', tab_me: '我的', tab_ai: 'AI 助手',
+      me_balance: '我的额度', me_claims: '我的报销', me_family: '家属信息', me_switch: '切换身份',
+      mobile_hint: '移动端用户模式',
+    },
     topbar: {
       global: '全球合规', notifications: '通知', ai_assistant: 'AI 助手',
       switch_company: '切换公司', switch_role: '切换角色', switch_lang: '切换语言',
@@ -146,6 +151,11 @@ const I18N = {
   // ─────────────── English(全量) ───────────────
   en: {
     app: { title: 'Paydaes ClaimGPT · Group AI Expense Platform', group: 'Paydaes Group' },
+    m: {
+      tab_home: 'Home', tab_claim: 'Claims', tab_me: 'Me', tab_ai: 'AI',
+      me_balance: 'My Quota', me_claims: 'My Claims', me_family: 'Family', me_switch: 'Switch Role',
+      mobile_hint: 'Mobile User Mode',
+    },
     topbar: {
       global: 'Global Compliance', notifications: 'Notifications', ai_assistant: 'AI Assistant',
       switch_company: 'Switch Company', switch_role: 'Switch Role', switch_lang: 'Language',
