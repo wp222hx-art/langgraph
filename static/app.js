@@ -453,6 +453,11 @@ function statutoryCard() {
     { id: 'payslip', icon: 'fa-file-invoice-dollar', color: 'emerald' },
     { id: 'epf_borang_a', icon: 'fa-piggy-bank', color: 'blue' },
     { id: 'ea_form', icon: 'fa-file-contract', color: 'orange' },
+    { id: 'cp39', icon: 'fa-receipt', color: 'rose' },
+    { id: 'socso_8a', icon: 'fa-shield-heart', color: 'cyan' },
+    { id: 'bank_ibg', icon: 'fa-building-columns', color: 'indigo' },
+    { id: 'payroll_gl', icon: 'fa-scale-balanced', color: 'amber' },
+    { id: 'lhdn_audit', icon: 'fa-file-shield', color: 'slate' },
   ];
   const cards = forms.map(f => `
     <button class="stat-form-btn" onclick="exportStatutory('${f.id}')" id="stat-btn-${f.id}">

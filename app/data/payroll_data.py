@@ -30,6 +30,58 @@ def epf_employer_rate(monthly_wage: float) -> float:
 EIS_RATE = 0.002          # 雇员/雇主各 0.2%
 EIS_WAGE_CAP = 5000.0     # EIS 计算工资上限
 
+# ── HRDF(人力资源发展征费 / PSMB Levy)──
+# 制造/服务业雇主(≥10 员工)按月薪 1% 计提;此处作为可配置常量。
+HRDF_RATE = 0.01
+
+# ── 加班分级费率(FRS 流程2 步骤C)──
+#   平日(normal) 1.5 倍 / 休息日(rest) 2.0 倍 / 公假(holiday) 3.0 倍
+#   基本时薪 = 月基本工资 / 26 / 8
+OT_RATES = {"normal": 1.5, "rest": 2.0, "holiday": 3.0}
+OT_DAYS_PER_MONTH = 26
+OT_HOURS_PER_DAY = 8
+
+def hourly_rate(basic_monthly: float) -> float:
+    """基本时薪 = 月基本工资 / 26 / 8。"""
+    return round(basic_monthly / OT_DAYS_PER_MONTH / OT_HOURS_PER_DAY, 4)
+
+def compute_ot(basic_monthly: float, ot_hours: dict | float | int | None) -> dict:
+    """加班费计算。
+    ot_hours 可为:
+      · dict  {"normal":h, "rest":h, "holiday":h}  —— 分级时数
+      · 数字  —— 向后兼容: 视为平日加班"金额"(旧 ot 字段)直接返回
+    返回 {amount, hourly, breakdown:[{tier,hours,rate,amount}]}
+    """
+    hourly = hourly_rate(basic_monthly)
+    # 向后兼容: 旧库 ot 是直接的金额(数字)
+    if ot_hours is None:
+        return {"amount": 0.0, "hourly": hourly, "breakdown": []}
+    if isinstance(ot_hours, (int, float)):
+        amt = round(float(ot_hours), 2)
+        return {"amount": amt, "hourly": hourly,
+                "breakdown": ([{"tier": "legacy", "hours": 0, "rate": 0, "amount": amt}] if amt else [])}
+    # 分级时数
+    breakdown, total = [], 0.0
+    for tier, mult in OT_RATES.items():
+        h = float(ot_hours.get(tier, 0) or 0)
+        if h <= 0:
+            continue
+        amt = round(hourly * mult * h, 2)
+        total += amt
+        breakdown.append({"tier": tier, "hours": h, "rate": mult, "amount": amt})
+    return {"amount": round(total, 2), "hourly": hourly, "breakdown": breakdown}
+
+def prorate_basic(basic_monthly: float, worked_days: int | None, month_days: int | None) -> dict:
+    """入/离职月按比例基本工资 = 月薪 / 当月总天数 * 实际在职天数。
+    worked_days / month_days 任一为空 → 全月足额。
+    """
+    if not worked_days or not month_days or worked_days >= month_days:
+        return {"basic": round(float(basic_monthly), 2), "prorated": False,
+                "worked_days": month_days or 0, "month_days": month_days or 0}
+    val = round(basic_monthly / month_days * worked_days, 2)
+    return {"basic": val, "prorated": True,
+            "worked_days": worked_days, "month_days": month_days}
+
 def socso_employee(monthly_wage: float) -> float:
     # 一类(<60岁) 雇员约 0.5%,以 5000 为上限近似
     base = min(monthly_wage, 5000.0)
@@ -55,39 +107,65 @@ def eis_amount(monthly_wage: float) -> float:
 def _emp(emp_no, name, ic_no, epf_no, socso_no, designation, dept, basic,
          allow_fixed=0, allow_taxexempt=0, bonus=0, ot=0,
          marital="single", spouse_income=True, children=0, children_tertiary=0,
-         zakat_monthly=0.0, tp1_relief=0.0):
+         zakat_monthly=0.0, tp1_relief=0.0, ot_hours=None,
+         worked_days=None, month_days=None, hrdf=True, bank_code="", bank_acct="",
+         tax_no="", bonus_month=0, commission=0):
     return dict(emp_no=emp_no, name=name, ic_no=ic_no, epf_no=epf_no, socso_no=socso_no,
                 designation=designation, dept=dept, basic=basic, allow_fixed=allow_fixed,
                 allow_taxexempt=allow_taxexempt, bonus=bonus, ot=ot, marital=marital,
                 spouse_income=spouse_income, children=children, children_tertiary=children_tertiary,
-                zakat_monthly=zakat_monthly, tp1_relief=tp1_relief)
+                zakat_monthly=zakat_monthly, tp1_relief=tp1_relief, ot_hours=ot_hours,
+                worked_days=worked_days, month_days=month_days, hrdf=hrdf,
+                bank_code=bank_code, bank_acct=bank_acct, tax_no=tax_no,
+                bonus_month=bonus_month, commission=commission)
 
 PAYROLL_EMPLOYEES = [
     _emp("MY001", "Ahmad Bin Ismail",  "880512-14-5523", "12345601", "880512145523",
-         "Engineering Manager", "Technology", 9500, 1200, 500, 19000, 0,
-         marital="married", spouse_income=False, children=2, zakat_monthly=150),
+         "Engineering Manager", "Technology", 9500, 1200, 500, 19000,
+         marital="married", spouse_income=False, children=2, zakat_monthly=150,
+         ot_hours={"normal": 10, "rest": 4}, bank_code="MBB", bank_acct="514012345678",
+         tax_no="SG10234567"),
     _emp("MY002", "Tan Mei Ling",      "910823-10-2241", "12345602", "910823102241",
-         "Senior Accountant", "Finance", 6800, 800, 500, 13600, 0,
-         marital="married", spouse_income=True, children=1),
+         "Senior Accountant", "Finance", 6800, 800, 500, 13600,
+         marital="married", spouse_income=True, children=1,
+         ot_hours={"normal": 6}, bank_code="CIMB", bank_acct="800123456789",
+         tax_no="SG20345678"),
     _emp("MY003", "Ruby Rose A/P Raj", "950114-08-5566", "12345603", "950114085566",
-         "HR Executive", "Human Resources", 4500, 500, 300, 4500, 420,
-         marital="single", children=0),
+         "HR Executive", "Human Resources", 4500, 500, 300, 4500,
+         marital="single", children=0,
+         ot_hours={"normal": 8, "holiday": 5}, bank_code="PBB", bank_acct="312045678901",
+         tax_no="SG30456789"),
+    # MY004: 离职月示例 —— 本月在职 18/30 天,基本工资按比例
     _emp("MY004", "John Lim Wei Jie",  "970328-14-7789", "12345604", "970328147789",
-         "Sales Executive", "Sales", 3800, 400, 300, 3800, 650,
-         marital="married", spouse_income=True, children=1, children_tertiary=1),
+         "Sales Executive", "Sales", 3800, 400, 300, 3800,
+         marital="married", spouse_income=True, children=1, children_tertiary=1,
+         ot_hours={"normal": 12, "rest": 6}, worked_days=18, month_days=30,
+         commission=500, bank_code="RHB", bank_acct="214098765432", tax_no="SG40567890"),
     _emp("MY005", "Siti Nurhaliza",    "930707-05-3312", "12345605", "930707053312",
-         "Admin Assistant", "Operations", 2900, 200, 200, 2900, 380,
-         marital="single", children=0),
+         "Admin Assistant", "Operations", 2900, 200, 200, 2900,
+         marital="single", children=0,
+         ot_hours={"normal": 14}, bank_code="MBB", bank_acct="514099887766",
+         tax_no="SG50678901"),
 ]
 
 
 def compute_monthly(emp: dict) -> dict:
-    """计算单个员工的月度薪资明细(含法定扣除)。"""
-    basic = emp["basic"]
+    """计算单个员工的月度薪资明细(含法定扣除/加班分级/按比例/企业总成本)。"""
     allow_fixed = emp.get("allow_fixed", 0)
     allow_te = emp.get("allow_taxexempt", 0)
-    ot = emp.get("ot", 0)
-    gross_taxable = basic + allow_fixed + ot          # 应税总收入
+    bonus_m = emp.get("bonus_month", 0)              # 当月奖金(年终奖另算)
+    comm = emp.get("commission", 0)
+
+    # ── 步骤B: 基本工资(入/离职月按比例)──
+    pr = prorate_basic(emp["basic"], emp.get("worked_days"), emp.get("month_days"))
+    basic = pr["basic"]
+
+    # ── 步骤C: 加班费(分级 1.5/2.0/3.0;兼容旧 ot 数字)──
+    ot_input = emp.get("ot_hours", emp.get("ot", 0))
+    ot_calc = compute_ot(emp["basic"], ot_input)
+    ot = ot_calc["amount"]
+
+    gross_taxable = basic + allow_fixed + ot + bonus_m + comm   # 应税总收入
     gross_total = gross_taxable + allow_te            # 实际总收入(含免税)
 
     epf_emp = round(gross_taxable * EPF_EMPLOYEE_RATE, 2)
@@ -115,17 +193,30 @@ def compute_monthly(emp: dict) -> dict:
 
     deductions = epf_emp + socso_emp + eis_emp + pcb + zakat
     net = round(gross_total - deductions, 2)
+
+    # ── 步骤H: 雇主缴纳 & 企业总成本 ──
+    hrdf = round(gross_taxable * HRDF_RATE, 2) if emp.get("hrdf", True) else 0.0
+    employer_contrib = round(epf_er + socso_er + eis_er + hrdf, 2)
+    total_cost = round(gross_total + employer_contrib, 2)
+
     return {
         **emp,
+        "basic_pay": basic,                # 按比例后的实际基本工资
+        "prorate": pr,                     # 按比例明细
+        "ot_amount": ot,
+        "ot_detail": ot_calc,              # 加班分级明细
         "gross_taxable": round(gross_taxable, 2),
         "gross_total": round(gross_total, 2),
         "epf_emp": epf_emp, "epf_er": epf_er,
         "socso_emp": socso_emp, "socso_er": socso_er,
         "eis_emp": eis_emp, "eis_er": eis_er,
+        "hrdf": hrdf,
         "pcb": pcb, "zakat": zakat,
         "pcb_detail": mtd,
         "total_deduction": round(deductions, 2),
         "net_pay": net,
+        "employer_contrib": employer_contrib,   # 雇主缴纳合计
+        "total_cost": total_cost,                # 企业总成本
     }
 
 

@@ -21,6 +21,30 @@ STATUTORY_FORMS = {
     "payslip": ("工资单 Payslip", "Payslip"),
     "epf_borang_a": ("EPF Borang A · 公积金缴款表", "EPF Borang A (KWSP 6)"),
     "ea_form": ("EA Form · 年度个税表", "Form EA (C.P.8A)"),
+    "cp39": ("CP39 · PCB 月度汇缴表", "Form CP39 (LHDN MTD)"),
+    "socso_8a": ("SOCSO Form 8A · 社保月报表", "SOCSO Form 8A (PERKESO)"),
+    "bank_ibg": ("银行文件 IBG · 批量出粮", "Bank File IBG/GIRO (.txt)"),
+    "payroll_gl": ("薪资凭证分类账 · 借贷平衡", "Payroll GL Journal"),
+    "lhdn_audit": ("LHDN 审计文件", "LHDN Audit File (.txt)"),
+}
+
+# ── 薪资科目表(COA, FRS 第8节映射规则)──
+COA = {
+    "wage_exp":   ("61000", "工资费用 Wage Expense"),
+    "ot_exp":     ("61001", "加班费 Overtime Expense"),
+    "epf_exp":    ("62000", "EPF 费用 (雇主)"),
+    "socso_exp":  ("62001", "SOCSO 费用 (雇主)"),
+    "eis_exp":    ("62002", "EIS 费用 (雇主)"),
+    "hrdf_exp":   ("62003", "HRDF 费用"),
+    "pay_payable":("21000", "应付工资 Salary Payable"),
+    "epf_pay":    ("22001", "应付 EPF"),
+    "socso_pay":  ("22002", "应付 SOCSO"),
+    "eis_pay":    ("22003", "应付 EIS"),
+    "lhdn_pay":   ("22004", "应付 LHDN/PCB"),
+    "hrdf_pay":   ("22005", "应付 HRDF"),
+    "zakat_pay":  ("23001", "应付宗教捐 Zakat"),
+    "ded_pay":    ("23002", "应付扣款 (贷款/PTPTN)"),
+    "bank":       ("11001", "银行账户 Bank"),
 }
 
 # ── 样式常量 ──
@@ -34,17 +58,31 @@ def export_statutory(form_id: str, company: str = "my", period: str = "", emp_no
     if form_id not in STATUTORY_FORMS:
         return {"error": f"未知法定表格: {form_id}"}
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    fname = f"{form_id}_{company}_{ts}.xlsx"
+    # 纯文本类(银行文件/LHDN审计)用 .txt,其余用 .xlsx
+    ext = "txt" if form_id in ("bank_ibg", "lhdn_audit") else "xlsx"
+    fname = f"{form_id}_{company}_{ts}.{ext}"
     path = os.path.join(EXPORT_DIR, fname)
 
+    extra = None
     if form_id == "payslip":
         _build_payslip(path, period or "2026-05", emp_no)
     elif form_id == "epf_borang_a":
         _build_epf_borang_a(path, period or "2026-05")
     elif form_id == "ea_form":
         _build_ea_form(path, period or "2026")
+    elif form_id == "cp39":
+        _build_cp39(path, period or "2026-05")
+    elif form_id == "socso_8a":
+        _build_socso_8a(path, period or "2026-05")
+    elif form_id == "bank_ibg":
+        extra = _build_bank_ibg(path, period or "2026-05")
+    elif form_id == "payroll_gl":
+        extra = _build_payroll_gl(path, period or "2026-05")
+    elif form_id == "lhdn_audit":
+        _build_lhdn_audit(path, period or "2026-05")
 
-    return {"ok": True, "form_id": form_id, "filename": fname,
+    out_extra = extra or {}
+    return {"ok": True, "form_id": form_id, "filename": fname, **out_extra,
             "download_url": f"/api/report/download/{fname}",
             "size": os.path.getsize(path),
             "title": STATUTORY_FORMS[form_id][0]}
@@ -253,3 +291,255 @@ def _build_ea_form(path: str, year: str):
 
         ws.cell(r, 1, "本表依 LHDN Form EA (C.P.8A) 结构生成,须于次年 2 月底前发予雇员。正式申报以 LHDN e-Filing / HASiL 官方为准。").font = s["sub"]
     wb.save(path)
+
+
+# ════════════════ ④ CP39 (PCB 月度汇缴表) ════════════════
+def _build_cp39(path: str, period: str):
+    from openpyxl import Workbook
+    s = _styles()
+    wb = Workbook(); ws = wb.active; ws.title = "CP39"
+    for i, w in enumerate([6, 18, 26, 18, 16, 14, 14, 16, 14], 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    ws.merge_cells("A1:I1"); ws["A1"] = "FORM CP39 — Monthly PCB/MTD Remittance / 月度预扣税汇缴表"
+    ws["A1"].font = s["title"]
+    ws.merge_cells("A2:I2"); ws["A2"] = f"Employer 雇主: {P.EMPLOYER['name']}  ·  Tax File 税档号: {P.EMPLOYER['employer_no']}"
+    ws["A2"].font = s["sub"]
+    ws.merge_cells("A3:I3"); ws["A3"] = f"Month/Year 月份: {period}  ·  Submission 提交日: {datetime.now():%d/%m/%Y}"
+    ws["A3"].font = s["label"]
+
+    headers = ["No\n序号", "Tax File\n税档号", "Employee Name\n姓名", "IC/Passport\n证件",
+               "Remuneration\n月度报酬", "EPF\n公积金", "MTD/PCB\n当月", "YTD PCB\n累计", "Remark\n备注"]
+    hr = 5
+    for ci, h in enumerate(headers, 1):
+        c = ws.cell(hr, ci, h); c.font = s["hfont"]; c.fill = s["hfill"]
+        c.alignment = s["center"]; c.border = s["border"]
+
+    n = tot_rem = tot_pcb = tot_ytd = 0
+    tot_rem = tot_pcb = tot_ytd = 0.0
+    for emp in P.PAYROLL_EMPLOYEES:
+        m = P.compute_monthly(emp)
+        if m["pcb"] <= 0:          # 仅含有 PCB 的员工(文档要求)
+            continue
+        n += 1
+        ytd = round(m["pcb"] * 5, 2)   # 年初至今(演示: 假设第5个月)
+        row = [n, emp.get("tax_no", ""), emp["name"], emp["ic_no"].replace("-", ""),
+               m["gross_taxable"], m["epf_emp"], m["pcb"], ytd, ""]
+        for ci, v in enumerate(row, 1):
+            c = ws.cell(hr + n, ci, v); c.border = s["border"]
+            if ci >= 5: c.alignment = s["right"]
+        tot_rem += m["gross_taxable"]; tot_pcb += m["pcb"]; tot_ytd += ytd
+
+    tr = hr + n + 1
+    ws.cell(tr, 4, "TOTAL 合计").font = s["label"]
+    for ci, v in zip([5, 7, 8], [round(tot_rem, 2), round(tot_pcb, 2), round(tot_ytd, 2)]):
+        c = ws.cell(tr, ci, v); c.font = s["label"]; c.fill = s["light"]; c.alignment = s["right"]
+    ws.cell(tr + 2, 1, f"Employees with PCB 缴税人数: {n}").font = s["sub"]
+    ws.cell(tr + 3, 1, "Payment Due 缴款截止: 次月 15 日前. 关联表: CP21(离职)/CP22(入职)/CP22A(变更).").font = s["sub"]
+    ws.cell(tr + 5, 1, "证明: 本人证明所提供信息真实准确。  签名: ______________  日期: __________  (公司盖章)").font = s["label"]
+    ws.cell(tr + 7, 1, "本表依 LHDN CP39 结构生成,正式提交以 LHDN e-PCB / e-Data PCB 官方为准。").font = s["sub"]
+    wb.save(path)
+
+
+# ════════════════ ⑤ SOCSO Form 8A (社保月报表) ════════════════
+def _build_socso_8a(path: str, period: str):
+    from openpyxl import Workbook
+    s = _styles()
+    wb = Workbook(); ws = wb.active; ws.title = "SOCSO 8A"
+    for i, w in enumerate([6, 16, 26, 18, 14, 14, 14, 14, 14], 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    ws.merge_cells("A1:I1"); ws["A1"] = "SOCSO FORM 8A — Monthly Contribution / 社险月度缴款表 (PERKESO)"
+    ws["A1"].font = s["title"]
+    ws.merge_cells("A2:I2"); ws["A2"] = f"Employer 雇主: {P.EMPLOYER['name']}  ·  SOCSO No 社保号: {P.EMPLOYER['socso_no']}"
+    ws["A2"].font = s["sub"]
+    ws.merge_cells("A3:I3"); ws["A3"] = f"Contribution Month 缴款月份: {period}  ·  Submission 提交日: {datetime.now():%d/%m/%Y}"
+    ws["A3"].font = s["label"]
+
+    headers = ["No", "SOCSO No\n社保号", "Employee Name\n姓名", "IC No\n身份证(无横线)",
+               "Wages\n工资", "SIP Emp\n工伤员工", "SIP Er\n工伤雇主", "Emp Total\n员工合计", "Er Total\n雇主合计"]
+    hr = 5
+    for ci, h in enumerate(headers, 1):
+        c = ws.cell(hr, ci, h); c.font = s["hfont"]; c.fill = s["hfill"]
+        c.alignment = s["center"]; c.border = s["border"]
+
+    n = 0
+    t_wage = t_emp = t_er = 0.0
+    for emp in P.PAYROLL_EMPLOYEES:
+        m = P.compute_monthly(emp)
+        n += 1
+        # SIP(工伤) 与 SPK(残疾) 在一类计划中合并由 socso_employee/employer 给出
+        emp_part = m["socso_emp"]; er_part = m["socso_er"]
+        row = [n, emp.get("socso_no", ""), emp["name"], emp["ic_no"].replace("-", ""),
+               m["gross_taxable"], emp_part, er_part, emp_part, er_part]
+        for ci, v in enumerate(row, 1):
+            c = ws.cell(hr + n, ci, v); c.border = s["border"]
+            if ci >= 5: c.alignment = s["right"]
+        t_wage += m["gross_taxable"]; t_emp += emp_part; t_er += er_part
+
+    tr = hr + n + 1
+    ws.cell(tr, 4, "TOTAL 合计").font = s["label"]
+    for ci, v in zip([5, 8, 9], [round(t_wage, 2), round(t_emp, 2), round(t_er, 2)]):
+        c = ws.cell(tr, ci, v); c.font = s["label"]; c.fill = s["light"]; c.alignment = s["right"]
+    grand = round(t_emp + t_er, 2)
+    ws.cell(tr + 2, 1, f"员工总数: {n}   员工总额: {round(t_emp,2)}   雇主总额: {round(t_er,2)}   总计(员工+雇主): {grand}").font = s["label"]
+    ws.cell(tr + 3, 1, "付款方式: ☐支票 ☐电子转账 ☐其他   参考号: ______________").font = s["sub"]
+    ws.cell(tr + 5, 1, "本表依 PERKESO Form 8A 结构生成,正式提交以 ASSIST Portal 官方为准。").font = s["sub"]
+    wb.save(path)
+
+
+# ════════════════ ⑥ 银行文件 IBG/GIRO (.txt 定长) ════════════════
+def _build_bank_ibg(path: str, period: str) -> dict:
+    """生成 IBG 定长文本: 表头(类型1,80) + 明细(类型2,100) + 表尾(类型9,80)。"""
+    emps = [P.compute_monthly(e) for e in P.PAYROLL_EMPLOYEES]
+    details = [e for e in emps if e.get("bank_acct")]
+    proc_date = datetime.now().strftime("%d%m%Y")
+    batch_ref = "PAY" + datetime.now().strftime("%y%m%d%H%M")
+    total_amt = round(sum(e["net_pay"] for e in details), 2)
+    period_tag = period.replace("-", "").upper()
+
+    def amt15(x):  # 15位右对齐, 含2位小数无符号
+        return f"{x:.2f}".replace(".", "").rjust(15, "0")[:15]
+    def amt_hdr(x):
+        return f"{x:.2f}".replace(".", "").rjust(15, "0")[:15]
+
+    lines = []
+    # 表头(类型1) — 固定 80 字符
+    hdr = ("1" + "IBG" + "MBB" + P.EMPLOYER.get("epf_no", "")[:10].ljust(10)
+           + P.EMPLOYER["name"][:40].ljust(40) + proc_date + batch_ref[:12].ljust(12)
+           + str(len(details)).rjust(6, "0") + amt_hdr(total_amt))
+    lines.append(hdr.ljust(80)[:80])
+    # 明细(类型2) — 固定 100 字符
+    hash_tail = 0
+    for e in details:
+        acct = (e.get("bank_acct", "") or "")
+        hash_tail += int(acct[-4:]) if acct[-4:].isdigit() else 0
+        ref = f"PAYDAES-SAL-{period_tag}"
+        det = ("2" + (e.get("bank_code", "") or "")[:3].ljust(3) + "000"
+               + acct.rjust(20, "0")[:20] + e["name"][:40].ljust(40)
+               + amt15(e["net_pay"]) + ref[:20].ljust(20) + "03" + " ")
+        lines.append(det.ljust(100)[:100])
+    # 表尾(类型9) — 固定 80 字符
+    ftr = ("9" + str(len(details) + 2).rjust(6, "0") + amt_hdr(total_amt)
+           + str(hash_tail).rjust(12, "0"))
+    lines.append(ftr.ljust(80)[:80])
+
+    with open(path, "w", encoding="ascii", errors="replace") as f:
+        f.write("\n".join(lines) + "\n")
+    return {"batch_ref": batch_ref, "txn_count": len(details), "total_amount": total_amt}
+
+
+# ════════════════ ⑦ 薪资凭证分类账 (借贷平衡) ════════════════
+def build_payroll_journal(period: str) -> dict:
+    """构建薪资凭证(分录),严格借贷平衡。返回 {voucher_no, lines[], total_debit, total_credit, balanced}。"""
+    emps = [P.compute_monthly(e) for e in P.PAYROLL_EMPLOYEES]
+    agg = {
+        # 工资费用 = 总收入扣除加班部分(加班单列): basic + 津贴(应税+免税) + 奖金 + 佣金
+        "wage": sum(e["gross_total"] - e["ot_amount"] for e in emps),
+        "ot": sum(e["ot_amount"] for e in emps),
+        "epf_emp": sum(e["epf_emp"] for e in emps),  "epf_er": sum(e["epf_er"] for e in emps),
+        "socso_emp": sum(e["socso_emp"] for e in emps), "socso_er": sum(e["socso_er"] for e in emps),
+        "eis_emp": sum(e["eis_emp"] for e in emps),  "eis_er": sum(e["eis_er"] for e in emps),
+        "hrdf": sum(e["hrdf"] for e in emps),
+        "pcb": sum(e["pcb"] for e in emps), "zakat": sum(e.get("zakat", 0) for e in emps),
+        "net": sum(e["net_pay"] for e in emps),
+    }
+    agg = {k: round(v, 2) for k, v in agg.items()}
+    n = len(emps)
+    L = []  # (code, name, debit, credit, ref)
+    def dr(key, amt, ref=""):
+        c, nm = COA[key]; L.append([c, nm, round(amt, 2), 0.0, ref])
+    def cr(key, amt, ref=""):
+        c, nm = COA[key]; L.append([c, nm, 0.0, round(amt, 2), ref])
+
+    # 借: 费用类
+    dr("wage_exp", agg["wage"], f"{n} 名员工 工资+津贴")
+    if agg["ot"]: dr("ot_exp", agg["ot"], "加班费")
+    dr("epf_exp", agg["epf_er"], "雇主 EPF")
+    dr("socso_exp", agg["socso_er"], "雇主 SOCSO")
+    dr("eis_exp", agg["eis_er"], "雇主 EIS")
+    if agg["hrdf"]: dr("hrdf_exp", agg["hrdf"], "HRDF 征费")
+    # 贷: 应付各项 + 实发(走应付工资过渡再贷银行)
+    cr("epf_pay", round(agg["epf_emp"] + agg["epf_er"], 2), "应付 EPF (员工+雇主)")
+    cr("socso_pay", round(agg["socso_emp"] + agg["socso_er"], 2), "应付 SOCSO")
+    cr("eis_pay", round(agg["eis_emp"] + agg["eis_er"], 2), "应付 EIS")
+    cr("lhdn_pay", agg["pcb"], "应付 PCB/LHDN")
+    if agg["hrdf"]: cr("hrdf_pay", agg["hrdf"], "应付 HRDF")
+    if agg["zakat"]: cr("zakat_pay", agg["zakat"], "应付 Zakat")
+    cr("bank", agg["net"], "实发工资 → 银行")
+
+    total_debit = round(sum(x[2] for x in L), 2)
+    total_credit = round(sum(x[3] for x in L), 2)
+    # 借贷平衡保护: 浮点尾差兜底(<=0.05 调入银行行)
+    diff = round(total_debit - total_credit, 2)
+    if abs(diff) > 0 and abs(diff) <= 0.05:
+        for x in L:
+            if x[1].startswith("银行账户"):
+                x[3] = round(x[3] + diff, 2); break
+        total_credit = round(sum(x[3] for x in L), 2)
+    voucher_no = f"PAY-{period.replace('-', '-')}-0001"
+    return {"voucher_no": voucher_no, "period": period, "lines": L,
+            "total_debit": round(total_debit, 2), "total_credit": round(total_credit, 2),
+            "balanced": abs(total_debit - total_credit) < 0.01, "emp_count": n}
+
+
+def _build_payroll_gl(path: str, period: str) -> dict:
+    from openpyxl import Workbook
+    s = _styles()
+    j = build_payroll_journal(period)
+    wb = Workbook(); ws = wb.active; ws.title = "GL Journal"
+    for i, w in enumerate([8, 14, 30, 16, 16, 28], 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    ws.merge_cells("A1:F1"); ws["A1"] = "PAYROLL JOURNAL — 薪资凭证分类账 (借贷平衡)"; ws["A1"].font = s["title"]
+    ws.merge_cells("A2:F2"); ws["A2"] = f"Voucher 凭证编号: {j['voucher_no']}  ·  Period 期间: {period}  ·  Source 来源: 薪资"
+    ws["A2"].font = s["sub"]
+    ws.merge_cells("A3:F3"); ws["A3"] = f"摘要: {period} 薪资凭证  ·  状态: 草稿  ·  过账日: {datetime.now():%Y-%m-%d %H:%M}"
+    ws["A3"].font = s["label"]
+
+    headers = ["Line\n行号", "Account\n科目编码", "Account Name\n科目名称", "Debit\n借方", "Credit\n贷方", "Reference\n参考"]
+    hr = 5
+    for ci, h in enumerate(headers, 1):
+        c = ws.cell(hr, ci, h); c.font = s["hfont"]; c.fill = s["hfill"]
+        c.alignment = s["center"]; c.border = s["border"]
+    for i, (code, name, dr, cr, ref) in enumerate(j["lines"], 1):
+        row = [i, code, name, dr if dr else None, cr if cr else None, ref]
+        for ci, v in enumerate(row, 1):
+            c = ws.cell(hr + i, ci, v); c.border = s["border"]
+            if ci in (4, 5): c.alignment = s["right"]
+    tr = hr + len(j["lines"]) + 1
+    ws.cell(tr, 3, "控制合计 TOTAL").font = s["label"]
+    c = ws.cell(tr, 4, j["total_debit"]); c.font = s["label"]; c.fill = s["light"]; c.alignment = s["right"]
+    c = ws.cell(tr, 5, j["total_credit"]); c.font = s["label"]; c.fill = s["light"]; c.alignment = s["right"]
+    bal = "✓ 借贷平衡 BALANCED" if j["balanced"] else "✗ 不平衡 — 请检查"
+    ws.cell(tr + 2, 1, f"借方总额 {j['total_debit']}  =  贷方总额 {j['total_credit']}   {bal}").font = s["bold"]
+    ws.cell(tr + 3, 1, "规则: 借方必须等于贷方(会计平衡原则); 每笔凭证至少2行。COA 可转换至本地科目表。").font = s["sub"]
+    wb.save(path)
+    return {"voucher_no": j["voucher_no"], "balanced": j["balanced"],
+            "total_debit": j["total_debit"], "total_credit": j["total_credit"]}
+
+
+# ════════════════ ⑧ LHDN 审计文件 (.txt) ════════════════
+def _build_lhdn_audit(path: str, period: str):
+    emps = [P.compute_monthly(e) for e in P.PAYROLL_EMPLOYEES]
+    lines = []
+    lines.append("=" * 78)
+    lines.append("LHDN AUDIT FILE / LHDN 审计文件".center(78))
+    lines.append(f"Employer: {P.EMPLOYER['name']}".ljust(78))
+    lines.append(f"Tax File: {P.EMPLOYER['employer_no']}   Period: {period}".ljust(78))
+    lines.append(f"Generated: {datetime.now():%Y-%m-%d %H:%M:%S}".ljust(78))
+    lines.append("=" * 78)
+    hdr = f"{'TaxFile':<12}{'Name':<22}{'IC':<16}{'Gross':>12}{'EPF':>10}{'PCB':>10}"
+    lines.append(hdr)
+    lines.append("-" * 78)
+    t_gross = t_epf = t_pcb = 0.0
+    for e in emps:
+        lines.append(f"{e.get('tax_no',''):<12}{e['name'][:21]:<22}{e['ic_no'].replace('-',''):<16}"
+                     f"{e['gross_taxable']:>12.2f}{e['epf_emp']:>10.2f}{e['pcb']:>10.2f}")
+        t_gross += e["gross_taxable"]; t_epf += e["epf_emp"]; t_pcb += e["pcb"]
+    lines.append("-" * 78)
+    lines.append(f"{'TOTAL':<50}{t_gross:>12.2f}{t_epf:>10.2f}{t_pcb:>10.2f}")
+    lines.append("=" * 78)
+    lines.append("本文件依 LHDN 审计要求生成(纯文本存档)。正式以 LHDN HASiL 官方格式为准。")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
