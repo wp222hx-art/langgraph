@@ -42,6 +42,7 @@ NAV_TREE = [
         {"id": "family", "name": "家庭信息", "name_en": "Family Info", "module": "家庭信息"},
     ]},
     {"id": "global", "name": "全球合规中心", "name_en": "Global Compliance", "icon": "fa-earth-asia", "type": "page", "badge": "NEW"},
+    {"id": "cockpit", "name": "AI 老板驾驶舱", "name_en": "AI Boss Cockpit", "icon": "fa-gauge-high", "type": "page", "badge": "AI"},
 ]
 
 # ═══════════════════════════════════════════════

@@ -141,10 +141,11 @@ PAYROLL_EMPLOYEES = [
          marital="married", spouse_income=True, children=1, children_tertiary=1,
          ot_hours={"normal": 12, "rest": 6}, worked_days=18, month_days=30,
          commission=500, bank_code="RHB", bank_acct="214098765432", tax_no="SG40567890"),
+    # MY005: 加班严重超标示例 —— 触发 critical 稽查(80h > 72h 严重阈值)
     _emp("MY005", "Siti Nurhaliza",    "930707-05-3312", "12345605", "930707053312",
          "Admin Assistant", "Operations", 2900, 200, 200, 2900,
          marital="single", children=0,
-         ot_hours={"normal": 14}, bank_code="MBB", bank_acct="514099887766",
+         ot_hours={"normal": 60, "rest": 12, "holiday": 8}, bank_code="MBB", bank_acct="514099887766",
          tax_no="SG50678901"),
 ]
 

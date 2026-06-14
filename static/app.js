@@ -240,6 +240,7 @@ function go(navId) {
   view.classList.remove('fade-in'); void view.offsetWidth; view.classList.add('fade-in');
   if (navId === 'dashboard') return renderDashboard();
   if (navId === 'global') return renderCompliance();
+  if (navId === 'cockpit') return renderCockpit();
   if (navId === 'ai_config') return renderAIConfig();
   renderModule(navId);
 }
@@ -587,6 +588,129 @@ function drawReportChart(m) {
     data: { labels: m.chart.labels, datasets: m.chart.series.map(s => ({ label: s.name, data: s.data, backgroundColor: 'rgba(32,201,151,.75)', borderRadius: 6 })) },
     options: { plugins: { legend: { labels: { font: { size: 11 } } } }, scales: { y: { beginAtZero: true } }, responsive: true, maintainAspectRatio: false } });
 }
+
+// ════════ AI 老板驾驶舱 ① + AI 异常稽查 ④ ════════
+let _cockpitCharts = [];
+async function renderCockpit() {
+  const view = $('#view');
+  const roleId = (S.role && S.role.id) || 'finance';
+  const lang = S.lang;
+  view.innerHTML = `<div class="cockpit-head">
+    <div><h1 class="page-title flex items-center gap-2"><i class="fas fa-gauge-high text-teal-500"></i> ${t('cockpit.title')}</h1>
+      <p class="text-sm text-slate-400 mt-0.5">${S.company.flag} ${nameOf(S.company)} · <span data-i18n="cockpit.sub">${t('cockpit.sub')}</span></p></div>
+    <div class="cockpit-health" id="ck-health"><div class="ck-health-ring" id="ck-ring"><span id="ck-health-num">··</span></div>
+      <div class="text-xs text-slate-400 mt-1" data-i18n="cockpit.health">${t('cockpit.health')}</div></div>
+  </div>
+  <div id="ck-ai" class="cockpit-ai"><div class="ck-ai-icon"><i class="fas fa-robot"></i></div>
+    <div class="ck-ai-body"><div class="ck-ai-title"><span data-i18n="cockpit.ai_title">${t('cockpit.ai_title')}</span></div>
+      <div class="ck-ai-text" id="ck-ai-text">${t('cockpit.loading')}</div>
+      <div class="ck-ai-factors" id="ck-ai-factors"></div></div></div>
+  <div class="cockpit-kpis" id="ck-kpis"></div>
+  <div class="cockpit-grid">
+    <div class="panel p-5"><div class="ck-card-title"><i class="fas fa-chart-line text-teal-500"></i> <span data-i18n="cockpit.trend">${t('cockpit.trend')}</span></div>
+      <div class="ck-chart-wrap"><canvas id="ck-trend"></canvas></div></div>
+    <div class="panel p-5"><div class="ck-card-title"><i class="fas fa-chart-pie text-indigo-500"></i> <span data-i18n="cockpit.dept">${t('cockpit.dept')}</span></div>
+      <div class="ck-chart-wrap"><canvas id="ck-dept"></canvas></div></div>
+  </div>
+  <div class="panel p-5 mt-4"><div class="ck-card-title"><i class="fas fa-triangle-exclamation text-amber-500"></i> <span data-i18n="cockpit.anomaly">${t('cockpit.anomaly')}</span>
+    <span class="ck-anom-counts" id="ck-anom-counts"></span></div>
+    <div id="ck-anom-list" class="ck-anom-list">${t('cockpit.loading')}</div></div>`;
+
+  const c = S.company.id, m = '2026-05';
+  const [ov, an, ex] = await Promise.all([
+    api(`/api/cockpit/overview?company=${c}&month=${m}&role=${roleId}`),
+    api(`/api/cockpit/anomalies?company=${c}&month=${m}&role=${roleId}`),
+    api(`/api/cockpit/explain?company=${c}&month=${m}&lang=${lang}&role=${roleId}`),
+  ]);
+  if (ov.denied || !ov.ok) { $('#ck-ai-text').textContent = (ov.message || t('cockpit.denied')); return; }
+  drawCockpitKpis(ov);
+  drawCockpitAI(ex);
+  drawCockpitHealth(an.health_score);
+  drawCockpitAnomalies(an);
+  drawCockpitCharts(ov);
+}
+
+function fmtRM(v) { return 'RM' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 }); }
+function momBadge(mom) {
+  if (!mom) return `<span class="ck-mom flat">0%</span>`;
+  const up = mom > 0;
+  return `<span class="ck-mom ${up ? 'up' : 'down'}"><i class="fas fa-arrow-${up ? 'up' : 'down'}"></i> ${Math.abs(mom)}%</span>`;
+}
+function drawCockpitKpis(ov) {
+  const order = ['total_cost', 'gross', 'net', 'employer_contrib', 'hrdf', 'pcb', 'ot', 'headcount'];
+  const icons = { total_cost: 'fa-sack-dollar', gross: 'fa-money-bill-wave', net: 'fa-hand-holding-dollar', employer_contrib: 'fa-building', hrdf: 'fa-graduation-cap', pcb: 'fa-landmark', ot: 'fa-clock', headcount: 'fa-users' };
+  const hero = ['total_cost'];
+  const lang = S.lang;
+  $('#ck-kpis').innerHTML = order.map(k => {
+    const kp = ov.kpis[k]; if (!kp) return '';
+    const val = k === 'headcount' ? kp.value : fmtRM(kp.value);
+    const lbl = lang === 'en' ? kp.label_en : kp.label_zh;
+    return `<div class="ck-kpi ${hero.includes(k) ? 'hero' : ''}">
+      <div class="ck-kpi-top"><i class="fas ${icons[k]}"></i>${k === 'headcount' ? '' : momBadge(kp.mom)}</div>
+      <div class="ck-kpi-val">${val}</div><div class="ck-kpi-lbl">${lbl}</div></div>`;
+  }).join('') + `<div class="ck-kpi soft"><div class="ck-kpi-top"><i class="fas fa-user-tag"></i></div>
+      <div class="ck-kpi-val">${fmtRM(ov.cost_per_head)}</div><div class="ck-kpi-lbl">${t('cockpit.per_head')}</div></div>`;
+}
+function drawCockpitAI(ex) {
+  $('#ck-ai-text').textContent = ex.summary || '';
+  const top = (ex.factors || []).slice(0, 4);
+  $('#ck-ai-factors').innerHTML = top.map(f => {
+    const lbl = S.lang === 'en' ? f.label_en : f.label_zh;
+    const up = f.delta > 0;
+    return `<span class="ck-factor ${up ? 'up' : 'down'}">${lbl} ${up ? '+' : ''}${fmtRM(f.delta)} <em>${f.share}%</em></span>`;
+  }).join('');
+}
+function drawCockpitHealth(score) {
+  const ring = $('#ck-ring'); $('#ck-health-num').textContent = score;
+  const col = score >= 85 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444';
+  ring.style.background = `conic-gradient(${col} ${score * 3.6}deg, #e2e8f0 0deg)`;
+}
+function drawCockpitAnomalies(an) {
+  const cc = an.counts || {};
+  $('#ck-anom-counts').innerHTML =
+    `<span class="ck-cnt crit">${cc.critical || 0} ${t('cockpit.sev_crit')}</span>
+     <span class="ck-cnt warn">${cc.warning || 0} ${t('cockpit.sev_warn')}</span>
+     <span class="ck-cnt info">${cc.info || 0} ${t('cockpit.sev_info')}</span>`;
+  const list = an.anomalies || [];
+  if (!list.length) { $('#ck-anom-list').innerHTML = `<div class="ck-anom-empty"><i class="fas fa-circle-check text-emerald-500"></i> ${t('cockpit.no_anomaly')}</div>`; return; }
+  $('#ck-anom-list').innerHTML = list.map(a => `
+    <div class="ck-anom ${a.severity}">
+      <div class="ck-anom-dot"></div>
+      <div class="ck-anom-main"><div class="ck-anom-title">${a.title} <span class="ck-anom-who">${a.subject}</span></div>
+        <div class="ck-anom-detail">${a.detail}</div></div>
+      <span class="ck-anom-tag ${a.severity}">${t('cockpit.sev_' + (a.severity === 'critical' ? 'crit' : a.severity === 'warning' ? 'warn' : 'info'))}</span>
+    </div>`).join('');
+}
+function drawCockpitCharts(ov) {
+  _cockpitCharts.forEach(ch => { try { ch.destroy(); } catch (e) {} });
+  _cockpitCharts = [];
+  const lang = S.lang;
+  // 趋势: 总成本(柱) + 加班(线)
+  const tr = ov.trend;
+  _cockpitCharts.push(new Chart($('#ck-trend'), {
+    data: {
+      labels: tr.map(r => r.month),
+      datasets: [
+        { type: 'bar', label: lang === 'en' ? 'Total Cost' : '企业总成本', data: tr.map(r => r.total_cost), backgroundColor: 'rgba(15,118,110,.85)', borderRadius: 6, order: 2 },
+        { type: 'line', label: lang === 'en' ? 'Overtime' : '加班成本', data: tr.map(r => r.ot), borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,.15)', tension: .35, fill: true, yAxisID: 'y1', order: 1 },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { font: { size: 11 } } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => 'RM' + (v / 1000) + 'k' } }, y1: { position: 'right', grid: { drawOnChartArea: false }, beginAtZero: true } } },
+  }));
+  // 部门分布(环图)
+  const dp = ov.departments;
+  const palette = ['#0f766e', '#20c997', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899'];
+  _cockpitCharts.push(new Chart($('#ck-dept'), {
+    type: 'doughnut',
+    data: { labels: dp.map(d => d.dept), datasets: [{ data: dp.map(d => d.total_cost), backgroundColor: palette, borderWidth: 2, borderColor: '#fff' }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '58%',
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12 } },
+        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtRM(ctx.raw)}` } } } },
+  }));
+}
+window.renderCockpit = renderCockpit;
 
 function selfClaimView(m) {
   const b = m.balance;

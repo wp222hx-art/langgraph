@@ -10,7 +10,23 @@
 
 ## ✅ 已完成功能
 
-### 💰 薪资精度引擎 · FRS 流程2(最新 · 第二波)
+### 🧠 AI 老板驾驶舱 + AI 异常稽查(最新 · 第四波 · 共享分析引擎)
+基于薪资精度引擎(第二波)的数据飞轮,新增**一个分析引擎服务两个产品**——老板看大屏(①)、系统自己揪异常(④):
+
+- **共享分析引擎** (`app/core/analytics.py`):一个引擎三种输出,消费 `payroll_data.compute_monthly()` 全员快照;用 md5 确定性伪历史(`_seed`)生成可复现的演示趋势。
+  - `build_overview()` — 驾驶舱聚合:企业总成本 / 总收入 / 净发 / 雇主缴纳 / HRDF / PCB / 加班 / 人数,每项带**环比 MoM%**、6 个月趋势、部门成本分布、人均成本、加班占比。
+  - `detect_anomalies()` — 异常稽查:个人级(加班时数 crit>72h / warn>40h、加班成本占比>30%、按比例工资提示)+ 公司级(总成本突增>10%、加班突增>15%),输出**健康分** `health = max(0, 100 - crit×20 - warn×8 - info×2)`。
+  - `explain_cost_change()` — AI 解读「这个月人力成本为什么涨了」:对基本工资/加班/EPF雇主/SOCSO雇主/EIS雇主/HRDF/PCB 做因子归因(各因子贡献额 + 占比%),生成中英文自然语言结论(`model: rule-based-v1`)。
+
+- **① AI 老板驾驶舱**(`renderCockpit`):实时大屏 = KPI 卡(企业总成本 hero + MoM 徽章)+ 趋势图(Chart.js bar+line 组合)+ 部门成本环图(doughnut)+ 健康分环(conic-gradient)+ AI 解读条(渐变青→蓝,因子拆解)。
+- **④ AI 异常稽查**:驾驶舱右侧异常雷达列表,按严重度 critical/warning/info 分级着色 + 脉冲点动画,实时显示揪出的加班异常 / 薪资跳变 / 总成本突增。
+- **新增 API**(权限 `cockpit.view`,授予 payroll/finance/hr_admin/sys_admin):
+  - `GET /api/cockpit/overview?company=&month=&role=` — 驾驶舱聚合数据
+  - `GET /api/cockpit/anomalies?...` — 异常清单 + 健康分
+  - `GET /api/cockpit/explain?...&lang=zh|en` — AI 成本变动解读
+- **演示数据**:MY005 加班拉满 80h(60平日+12休息日+8公假)触发 1 critical + 1 warning + 1 info,健康分 70,企业总成本 RM 40,698、环比 +4.1%,AI 解读「最大推手是基本工资/加班」。
+
+### 💰 薪资精度引擎 · FRS 流程2(第二波)
 对照《规范》流程2「薪资计算步骤 A~H」全面提精度:
 - **加班分级费率** (`payroll_data.compute_ot`):平日 **1.5 倍** / 休息日 **2.0 倍** / 公假 **3.0 倍**;基本时薪 = 月基本工资 / 26 / 8。员工可填分级时数 `{normal, rest, holiday}`,旧 `ot` 数字字段自动向后兼容。
 - **入/离职月按比例工资** (`prorate_basic`):基本工资 = 月薪 / 当月总天数 × 实际在职天数(演示员工 MY004 在职 18/30 天,基本工资按比例折算 2280)。
@@ -264,7 +280,7 @@ pm2 logs claimgpt --nostream     # 查看日志
 - **状态**:✅ 运行中
 - **技术栈**:Python 3.13 + FastAPI + LangGraph 1.2.4 + TailwindCSS + Chart.js
 - **验证**:后端 18/18 模块 + 2集团 + 6角色 + 7国合规全绿;前端桌面+移动端零 JS 错误
-- **最后更新**:2026-06-14(三波迭代对齐 FRS:Wave1 业务流程引擎 + Wave2 薪资精度引擎(加班分级/按比例/HRDF/企业总成本) + Wave3 政府法定文件(CP39/SOCSO 8A/银行IBG/凭证分类账/LHDN审计))
+- **最后更新**:2026-06-14(四波迭代对齐 FRS:Wave1 业务流程引擎 + Wave2 薪资精度引擎(加班分级/按比例/HRDF/企业总成本) + Wave3 政府法定文件(CP39/SOCSO 8A/银行IBG/凭证分类账/LHDN审计) + ①④ AI 老板驾驶舱(实时大屏+AI解读为何涨了)+ AI 异常稽查(加班/薪资跳变/总成本突增+健康分),共享 analytics 分析引擎)
 
 ## 🆕 Paydaes HR-Payroll 套件(Pro 方案 · 全量铺开)
 

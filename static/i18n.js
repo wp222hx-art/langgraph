@@ -138,6 +138,12 @@ const I18N = {
       done: '调整成功', history: '调整历史(审计留痕)', empty: '暂无调整记录',
       h_date: '时间', h_kind: '类型', h_amount: '金额', h_emp: '员工', h_reason: '原因', h_op: '操作人',
     },
+    cockpit: {
+      title: 'AI 老板驾驶舱', sub: '企业总成本 · HRDF · PCB 实时透视 + AI 解读',
+      health: '健康分', ai_title: 'AI 解读 · 这个月人力成本为什么变了？', loading: '分析中…', denied: '无权查看驾驶舱',
+      trend: '6 个月成本趋势', dept: '部门成本分布', anomaly: 'AI 异常稽查', per_head: '人均总成本',
+      no_anomaly: '本月未发现异常,运营健康。', sev_crit: '严重', sev_warn: '预警', sev_info: '提示',
+    },
     report: {
       export_excel: '导出 Excel', export_ppt: '导出 PPT', exporting: '正在生成报表…', export_done: '导出完成',
       no_perm: '当前身份无权导出报表', ai_insight: 'AI 洞察', deep_analysis: '对话式深度分析',
@@ -280,6 +286,12 @@ const I18N = {
       need_emp: 'Please select an employee', need_amount: 'Enter a valid amount', need_reason: 'Reason is required', need_target: 'Select a transfer target (not self)',
       done: 'Adjusted', history: 'Adjustment History (Audit)', empty: 'No records yet',
       h_date: 'Time', h_kind: 'Type', h_amount: 'Amount', h_emp: 'Employee', h_reason: 'Reason', h_op: 'Operator',
+    },
+    cockpit: {
+      title: 'AI Boss Cockpit', sub: 'Total Cost · HRDF · PCB live insight + AI narration',
+      health: 'Health', ai_title: 'AI Insight · Why did labour cost change this month?', loading: 'Analysing…', denied: 'No access to cockpit',
+      trend: '6-Month Cost Trend', dept: 'Cost by Department', anomaly: 'AI Anomaly Audit', per_head: 'Cost per Head',
+      no_anomaly: 'No anomalies this month. Operations healthy.', sev_crit: 'Critical', sev_warn: 'Warning', sev_info: 'Info',
     },
     report: {
       export_excel: 'Export Excel', export_ppt: 'Export PPT', exporting: 'Generating report…', export_done: 'Export done',

@@ -587,6 +587,34 @@ def payroll_run(company: str = "my", role: str = "payroll"):
             "ot_rates": P.OT_RATES, "hrdf_rate": P.HRDF_RATE}
 
 
+# ═══════ AI 老板驾驶舱 + AI 异常稽查 (共享 analytics 引擎) ═══════
+@app.get("/api/cockpit/overview")
+def cockpit_overview(company: str = "my", month: str = "2026-05", role: str = "finance"):
+    """驾驶舱聚合: 企业总成本/HRDF/PCB/加班/部门分布 + 6月趋势 —— 需 cockpit.view。"""
+    if not permissions.can(role, "cockpit.view"):
+        return permissions.deny_payload(role, "cockpit.view")
+    from app.core import analytics
+    return analytics.build_overview(company, month)
+
+
+@app.get("/api/cockpit/anomalies")
+def cockpit_anomalies(company: str = "my", month: str = "2026-05", role: str = "finance"):
+    """AI 异常稽查: 加班/报销/薪资跳变/总成本突增 + 健康分 —— 需 cockpit.view。"""
+    if not permissions.can(role, "cockpit.view"):
+        return permissions.deny_payload(role, "cockpit.view")
+    from app.core import analytics
+    return analytics.detect_anomalies(company, month)
+
+
+@app.get("/api/cockpit/explain")
+def cockpit_explain(company: str = "my", month: str = "2026-05", lang: str = "zh", role: str = "finance"):
+    """AI 解读「这个月人力成本为什么涨了」归因分析 —— 需 cockpit.view。"""
+    if not permissions.can(role, "cockpit.view"):
+        return permissions.deny_payload(role, "cockpit.view")
+    from app.core import analytics
+    return analytics.explain_cost_change(company, month, lang)
+
+
 @app.get("/api/statutory/forms")
 def statutory_forms():
     """法定表格清单(供前端渲染)。"""

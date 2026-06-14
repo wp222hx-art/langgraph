@@ -40,6 +40,8 @@ ACTIONS: dict[str, tuple[str, str, str]] = {
     "payroll.run":         ("执行薪资跑批", "Run payroll batch", "flow"),
     # 报表导出
     "report.export":       ("导出报表(PPT/Excel)", "Export report", "report"),
+    # 老板驾驶舱(决策层)
+    "cockpit.view":        ("AI 老板驾驶舱", "AI Cockpit", "insight"),
 }
 
 # ── 角色 → 操作集合(* 表示全权)──
@@ -56,13 +58,13 @@ ROLE_ACTIONS: dict[str, set[str]] = {
         "claim.approve", "claim.batch_approve",
         "claim_type.create", "claim_type.update", "claim_type.delete",
         "module_record.create", "module_record.delete", "entitlement.generate",
-        "report.export",
+        "report.export", "cockpit.view",
     },
     "payroll": {
-        "audit.interface", "payroll.run", "report.export",
+        "audit.interface", "payroll.run", "report.export", "cockpit.view",
     },
     "finance": {
-        "balance.adjust", "audit.interface", "report.export",
+        "balance.adjust", "audit.interface", "report.export", "cockpit.view",
         "claim.approve", "claim.batch_approve",   # 财务负责人参与多级审批 (文档 L2)
     },
     # 系统管理员:全权(含审批裁决) —— 最高权限可把审批操作处理掉
