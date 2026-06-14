@@ -102,6 +102,7 @@ const I18N = {
       new_form: '新建报销单', upload_invoice: '上传发票图片 · AI 自动识别回填',
       ocr_reading: 'AI 正在识别票据…', ocr_err: '识别失败,请手动填写',
       f_type: '请选择报销类型', f_merchant: '商户名称', f_amount: '金额', f_note: '备注说明',
+      f_receipt: '票据编号', f_date: '票据日期', blocked: '提交被拦截,请检查单据',
       submit: '提交报销单', submitting: '提交中…', submitted: '已生成单据',
       need_type: '请先选择报销类型', need_amount: '请输入有效金额',
       tax: '可抵扣税', recent_real: '实时报销记录(真实数据库)', refresh: '刷新',
@@ -115,6 +116,12 @@ const I18N = {
       approve: '通过', reject: '驳回', approved: '已通过', rejected: '已驳回',
       batch_low: '一键批量通过低风险', batch_done: '已批量通过笔数:',
       edit: '编辑', not_found: '未找到',
+    },
+    wf: {
+      return: '退回', returned: '已退回修改', in_review: '审批中',
+      next_level: '已通过本级,流转至', summary: '审批链',
+      post: '对接薪资过账', postable: '待对接薪资', posted: '已过账',
+      batch: '批次', no_postable: '暂无待对接的已批准单据',
     },
     fam: {
       archive: '家属档案', add: '新增家属', name: '家属姓名', need_name: '请输入家属姓名',
@@ -236,6 +243,7 @@ const I18N = {
       new_form: 'New Claim', upload_invoice: 'Upload invoice · AI auto-fill',
       ocr_reading: 'AI reading invoice…', ocr_err: 'Recognition failed, please fill manually',
       f_type: 'Select claim type', f_merchant: 'Merchant', f_amount: 'Amount', f_note: 'Note',
+      f_receipt: 'Receipt No.', f_date: 'Receipt Date', blocked: 'Submission blocked, please review',
       submit: 'Submit Claim', submitting: 'Submitting…', submitted: 'Created',
       need_type: 'Please select a claim type', need_amount: 'Enter a valid amount',
       tax: 'Deductible Tax', recent_real: 'Live Claims (Real Database)', refresh: 'Refresh',
@@ -249,6 +257,12 @@ const I18N = {
       approve: 'Approve', reject: 'Reject', approved: 'approved', rejected: 'rejected',
       batch_low: 'Batch approve low-risk', batch_done: 'Batch approved:',
       edit: 'Edit', not_found: 'Not found',
+    },
+    wf: {
+      return: 'Return', returned: 'Returned', in_review: 'In Review',
+      next_level: 'Level passed, routed to', summary: 'Approval Chain',
+      post: 'Post to Payroll', postable: 'Pending Payroll', posted: 'Posted',
+      batch: 'Batch', no_postable: 'No approved claims pending posting',
     },
     fam: {
       archive: 'Family Archive', add: 'Add Member', name: 'Member name', need_name: 'Please enter a name',

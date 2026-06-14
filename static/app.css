@@ -497,3 +497,10 @@ body.mode-mobile .chart-box{ height:220px; }
 .me-item > i:first-child{ width:22px; text-align:center; font-size:17px; }
 .me-item > span{ flex:1; }
 .me-arr{ color:#cbd5e1; font-size:13px; }
+
+/* ══════════════ 报销 AI 预判 + 审批链可视化 ══════════════ */
+.cf-predict{ margin-top:10px; padding:10px 12px; border-radius:10px;
+  background:linear-gradient(135deg,#f0fdfa,#eef2ff); border:1px solid #d1fae5;
+  font-size:12px; line-height:1.7; animation:fade-in .25s ease; }
+.cf-predict-chain{ color:#0f766e; font-weight:600; }
+.cf-predict-ai{ color:#4338ca; margin-top:3px; }

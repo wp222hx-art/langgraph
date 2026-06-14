@@ -399,6 +399,7 @@ function approvalView(m) {
         return `<tr>${r.map(c => `<td>${badgeCell(c)}</td>`).join('')}
         <td class="text-right whitespace-nowrap">
           <button class="btn btn-ghost text-xs py-1 text-emerald-600" onclick="decideClaim('${cid}','approved')"><i class="fas fa-check"></i> ${t('crud.approve')}</button>
+          <button class="btn btn-ghost text-xs py-1 text-amber-500" onclick="decideClaim('${cid}','returned')"><i class="fas fa-rotate-left"></i> ${t('wf.return')}</button>
           <button class="btn btn-ghost text-xs py-1 text-rose-500" onclick="decideClaim('${cid}','rejected')"><i class="fas fa-xmark"></i> ${t('crud.reject')}</button>
         </td></tr>`; }).join('')}</tbody>
     </table></div>
@@ -605,10 +606,15 @@ function selfClaimView(m) {
           <input class="ac-input flex-1" id="cf-amount" type="number" step="0.01" placeholder="${t('claim.f_amount')}">
           <input class="ac-input w-24" id="cf-currency" placeholder="${b.currency || 'SGD'}" value="${b.currency || 'SGD'}">
         </div>
+        <div class="flex gap-2">
+          <input class="ac-input flex-1" id="cf-receipt" placeholder="${t('claim.f_receipt')}">
+          <input class="ac-input w-36" id="cf-date" type="date" title="${t('claim.f_date')}">
+        </div>
         <input class="ac-input" id="cf-note" placeholder="${t('claim.f_note')}">
         <button class="btn btn-primary w-full justify-center" onclick="submitClaim()"><i class="fas fa-paper-plane"></i> ${t('claim.submit')}</button>
       </div>
       <p class="text-[11px] text-slate-400 mt-2" id="cf-feedback"></p>
+      <div id="cf-predict" class="cf-predict hidden"></div>
     </div>
 
     <!-- 实时报销记录(读真库) -->
@@ -862,19 +868,30 @@ async function deleteRow(kind, key) {
   } catch (e) { toast(t('claim.load_err'), true); }
 }
 
-// ════════ 审批端真操作(接 decide API) ════════
+// ════════ 审批端真操作(接多级审批流 advance API) ════════
 async function decideClaim(cid, status) {
   const fb = document.getElementById('approval-feedback');
   if (!cid) return;
+  // status: approved/rejected/returned → 审批流状态机 decision
+  const decision = status;
   if (fb) acFlash(fb, t('claim.submitting'), false);
   try {
-    const r = await api(`/api/claims/${encodeURIComponent(cid)}/decide`, { status, role: S.role.id });
+    const r = await api(`/api/claims/${encodeURIComponent(cid)}/advance`,
+      { decision, by: nameOf(S.role), comment: '', role: S.role.id });
+    if (r.denied) { if (fb) acFlash(fb, r.zh || r.en || t('perm.denied'), true); return; }
     if (r.error) { if (fb) acFlash(fb, r.error, true); return; }
-    const word = status === 'approved' ? t('crud.approved') : t('crud.rejected');
-    if (fb) acFlash(fb, `✅ ${cid} ${word}`, false);
+    // 多级审批反馈:显示整体状态 + 链摘要
+    const ov = r.overall;
+    const wordMap = { approved: t('crud.approved'), rejected: t('crud.rejected'),
+                      returned: t('wf.returned'), in_review: t('wf.in_review') };
+    const tip = ov === 'in_review'
+      ? `↗️ ${cid} ${t('wf.next_level')} L${r.current_level} · ${r.summary}`
+      : `✅ ${cid} ${wordMap[ov] || ov} · ${r.summary}`;
+    if (fb) acFlash(fb, tip, false);
     go(S.currentNav);
   } catch (e) { if (fb) acFlash(fb, t('claim.load_err'), true); }
 }
+window.decideClaim = decideClaim;
 async function batchApprove() {
   const fb = document.getElementById('approval-feedback');
   if (fb) acFlash(fb, t('claim.submitting'), false);
@@ -958,15 +975,31 @@ async function submitClaim() {
     merchant: (document.getElementById('cf-merchant') || {}).value || '',
     currency: (document.getElementById('cf-currency') || {}).value || '',
     note: (document.getElementById('cf-note') || {}).value || '',
+    receipt_no: (document.getElementById('cf-receipt') || {}).value || '',
+    invoice_date: (document.getElementById('cf-date') || {}).value || '',
   };
+  const pv = document.getElementById('cf-predict');
+  if (pv) pv.classList.add('hidden');
   acFlash(fb, t('claim.submitting'), false);
   try {
     payload.role = S.role.id;
     const r = await api('/api/claims', payload);
     if (r.error) { acFlash(fb, r.error, true); return; }
+    // ── 验证拦截 (7 条规则阻止级错误) ──
+    if (r.blocked) {
+      acFlash(fb, '⛔ ' + (r.message || t('claim.blocked')), true);
+      return;
+    }
     const risk = r.risk || {}; const cl = r.claim || {};
     acFlash(fb, `✅ ${t('claim.submitted')} ${cl.id} · ${t('claim.c_risk')} ${risk.score}(${risk.level}) · ${t('claim.tax')} ${r.tax_amount}`, false);
-    ['cf-merchant', 'cf-amount', 'cf-note'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    // ── AI 预判 + 审批链可视化 ──
+    if (pv && r.ai_predict) {
+      const p = r.ai_predict;
+      pv.classList.remove('hidden');
+      pv.innerHTML = `<div class="cf-predict-chain"><i class="fas fa-route text-teal-500"></i> ${r.chain_summary || ''}</div>
+        <div class="cf-predict-ai"><i class="fas fa-robot text-indigo-400"></i> ${p.summary}</div>`;
+    }
+    ['cf-merchant', 'cf-amount', 'cf-note', 'cf-receipt', 'cf-date'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     refreshClaims('mine');
   } catch (e) { acFlash(fb, t('claim.load_err'), true); }
 }
@@ -986,6 +1019,8 @@ async function ocrUpload(ev) {
       if (ext.merchant) { const e = document.getElementById('cf-merchant'); if (e) e.value = ext.merchant; }
       if (ext.amount) { const e = document.getElementById('cf-amount'); if (e) e.value = ext.amount; }
       if (ext.currency) { const e = document.getElementById('cf-currency'); if (e) e.value = ext.currency; }
+      if (ext.date) { const e = document.getElementById('cf-date'); if (e) e.value = ext.date; }
+      if (ext.tax_no) { const e = document.getElementById('cf-receipt'); if (e && !e.value) e.value = ext.tax_no; }
       const note = (r.engine_note && (S.lang === 'en' ? r.engine_note.en : r.engine_note.zh)) || '';
       if (hint) hint.textContent = (r.engine === 'vision' ? '✅ ' : 'ℹ️ ') + note;
     } catch (e) { if (hint) hint.textContent = t('claim.ocr_err'); }

@@ -63,6 +63,7 @@ ROLE_ACTIONS: dict[str, set[str]] = {
     },
     "finance": {
         "balance.adjust", "audit.interface", "report.export",
+        "claim.approve", "claim.batch_approve",   # 财务负责人参与多级审批 (文档 L2)
     },
     # 系统管理员:全权(含审批裁决) —— 最高权限可把审批操作处理掉
     "sys_admin": {"*"},

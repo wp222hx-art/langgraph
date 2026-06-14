@@ -184,3 +184,96 @@ def guess_type(text: str, company: str = "sg") -> dict | None:
         if any(k.lower() in t for k in kws):
             return db.get_claim_type(code, company)
     return None
+
+
+# ════════════════ 报销 7 条验证规则 (文档 流程3 · 第2步) ════════════════
+from datetime import date as _date, datetime as _dt  # noqa: E402
+
+# 报销有效期 (票据日期不得早于提交日 N 天前; 可由报销类型覆盖)
+STALE_DAYS_DEFAULT = 90
+
+
+def _parse_date(s: str) -> _date | None:
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return _dt.strptime(s.strip()[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def validate_claim(*, company: str, emp_id: str, ctype: dict,
+                   amount: float, amount_base: float,
+                   receipt_no: str = "", invoice_date: str = "",
+                   confirm_date: str = "", has_attachment: bool = False) -> dict:
+    """
+    报销提交完整验证 (文档 流程3 第2步 7 条规则)。
+    返回: {passed, blocking, issues[], warnings[]}
+      · blocking=True 表示存在阻止级错误, 不可提交。
+    """
+    from app.data import db
+    issues: list[dict] = []     # 阻止级
+    warnings: list[dict] = []   # 警告级
+    limit_amt = ctype.get("limit_amt", 0) or 0
+    type_name = ctype.get("name", "")
+    type_code = ctype.get("code", "")
+    today = _date.today()
+
+    # ① 单次限额 (单笔交易金额 <= 交易上限)
+    if limit_amt and amount > limit_amt:
+        over = round(amount - limit_amt, 2)
+        issues.append({"code": "OVER_LIMIT",
+                       "zh": f"金额 {amount} 超过【{type_name}】单笔限额 {limit_amt}(超 {over})",
+                       "en": f"Amount {amount} exceeds {type_name} per-claim limit {limit_amt}"})
+
+    # ② 余额 / 限额上限防护 (限额总额 >= 本次 + 已批准累计)
+    if limit_amt:
+        prior = db.approved_total(company, emp_id, type_code) if emp_id else 0
+        annual_cap = ctype.get("annual_cap", 0) or 0
+        if annual_cap and (prior + amount_base) > annual_cap:
+            issues.append({"code": "OVER_QUOTA",
+                           "zh": f"累计 {round(prior + amount_base,2)} 超过年度限额 {annual_cap}",
+                           "en": f"Cumulative exceeds annual cap {annual_cap}"})
+
+    # ③ 重复票据 (PM-9): 同员工+票据号+日期+金额+类型
+    if receipt_no and emp_id:
+        dup = db.find_duplicate_receipt(company, emp_id, receipt_no,
+                                        invoice_date, amount, type_code)
+        if dup:
+            issues.append({"code": "PM-9",
+                           "zh": f"检测到重复票据(单号 {receipt_no} 已存在于 {dup['id']})",
+                           "en": f"Duplicate receipt {receipt_no} (already in {dup['id']})"})
+
+    # ④ 票据日期 (PM-10): 必须 >= 入职确认日期
+    idate = _parse_date(invoice_date)
+    cdate = _parse_date(confirm_date)
+    if idate and cdate and idate < cdate:
+        issues.append({"code": "PM-10",
+                       "zh": f"票据日期 {invoice_date} 早于入职确认日 {confirm_date}",
+                       "en": f"Receipt date earlier than confirmation date"})
+
+    # ⑤ 过期报销: 票据日期早于提交日 N 天前
+    stale_days = ctype.get("stale_days", STALE_DAYS_DEFAULT)
+    if idate and (today - idate).days > stale_days:
+        issues.append({"code": "STALE",
+                       "zh": f"票据已过期(距今 {(today-idate).days} 天, 超 {stale_days} 天报销期限)",
+                       "en": f"Receipt expired ({(today-idate).days} days > {stale_days})"})
+
+    # ⑥ 未来日期校验
+    if idate and idate > today:
+        issues.append({"code": "FUTURE_DATE",
+                       "zh": f"票据日期 {invoice_date} 为未来日期, 无效",
+                       "en": "Receipt date is in the future"})
+
+    # ⑦ 必填附件 (按报销类型配置; 缺失 → 警告)
+    if ctype.get("need_attachment") and not has_attachment:
+        warnings.append({"code": "NO_ATTACH",
+                         "zh": f"【{type_name}】要求上传票据附件(当前缺失)",
+                         "en": f"{type_name} requires an attachment (missing)"})
+
+    return {"passed": len(issues) == 0, "blocking": len(issues) > 0,
+            "issues": issues, "warnings": warnings,
+            "limit": limit_amt,
+            "exceed_amt": round(max(0, amount - limit_amt), 2) if limit_amt else 0}

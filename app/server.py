@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import FileResponse, StreamingResponse
@@ -78,6 +79,22 @@ class ClaimReq(BaseModel):
     note: str = ""
     emp_id: str = ""
     role: str = "employee"
+    receipt_no: str = ""          # 票据编号 (PM-9 重复检测)
+    invoice_date: str = ""        # 票据日期 (PM-10 / 过期校验)
+    has_attachment: bool = False  # 是否已上传附件
+
+
+class DecideWfReq(BaseModel):
+    decision: str                  # approved / rejected / returned
+    by: str = "审批人"
+    comment: str = ""
+    role: str = "manager"
+
+
+class PostReq(BaseModel):
+    company: str = "sg"
+    pay_calendar: str = ""
+    role: str = "payroll"
 
 
 class OcrReq(BaseModel):
@@ -294,7 +311,8 @@ def get_claim(claim_id: str):
 
 @app.post("/api/claims")
 def create_claim(req: ClaimReq):
-    """表单提交报销单:真走计算引擎 + 真写库"""
+    """表单提交报销单:7条验证 → 构建审批链(条件路由) → AI预判 → 真写库"""
+    from app.core import workflow
     company = req.company
     cur = req.currency or db.COMPANY_CURRENCY.get(company, "CNY")
     emp = db.get_employee(req.emp_id or None, company) or {}
@@ -303,17 +321,65 @@ def create_claim(req: ClaimReq):
         return {"error": f"unknown type_code {req.type_code}"}
     base = calc.to_base_currency(req.amount, cur, db.COMPANY_CURRENCY.get(company, "CNY"))
     tax = calc.deductible_tax(base, company)
-    val = calc.validate_limit(req.amount, ctype["limit_amt"], ctype["name"])
+
+    # ── 7 条验证规则 (文档 流程3 第2步) ──
+    val = calc.validate_claim(
+        company=company, emp_id=emp.get("id", ""), ctype=ctype,
+        amount=req.amount, amount_base=base,
+        receipt_no=req.receipt_no, invoice_date=req.invoice_date,
+        confirm_date=emp.get("confirm_date", ""), has_attachment=req.has_attachment)
     risk = calc.risk_score(req.amount, ctype["limit_amt"], exceed=not val["passed"])
+
+    # ── 阻止级错误 → 拒绝入库, 返回明确提示 ──
+    if val["blocking"]:
+        return {"claim": None, "validation": val, "risk": risk,
+                "blocked": True,
+                "message": "提交被拦截:" + "；".join(i["zh"] for i in val["issues"])}
+
+    # ── 构建审批链 (按金额条件路由: >2000→财务; >10000→CFO) ──
+    chain = workflow.build_chain("claim", {"amount_base": base})
+    # ── AI 预判 (审批级别预测 + 风险摘要) ──
+    predict = _ai_predict_approval(req.amount, base, ctype, chain, risk, val)
+
     saved = db.create_claim({
         "company": company, "emp_id": emp.get("id", ""), "emp_name": emp.get("name", ""),
         "type_code": ctype["code"], "type_name": ctype["name"], "merchant": req.merchant,
         "amount": req.amount, "currency": cur, "amount_base": base, "tax_amount": tax,
+        "invoice_date": req.invoice_date, "receipt_no": req.receipt_no,
         "note": req.note, "risk_score": risk["score"], "risk_level": risk["level"],
         "risk_reasons": risk["reasons"], "status": "pending", "source": "form",
+        "approval_chain": chain, "cur_level": 1,
     })
     return {"claim": saved, "validation": val, "risk": risk,
-            "tax_amount": tax, "amount_base": base}
+            "tax_amount": tax, "amount_base": base,
+            "approval_chain": chain,
+            "chain_summary": workflow.chain_summary(chain),
+            "ai_predict": predict}
+
+
+def _ai_predict_approval(amount: float, base: float, ctype: dict,
+                         chain: list, risk: dict, val: dict) -> dict:
+    """AI 辅助预判:审批层级解读 + 通过率预测 + 一句话风险摘要。
+    规则推理为主(轻量、零延迟); 可后续接 LLM 增强。"""
+    levels = len(chain)
+    # 通过率: 风险越高 / 越超限 → 概率越低
+    score = risk.get("score", 0)
+    warn_n = len(val.get("warnings", []))
+    prob = max(20, min(98, 95 - score * 0.6 - warn_n * 8))
+    if levels == 1:
+        route = "仅需直属经理审批(金额在 RM2000 内)"
+    elif levels == 2:
+        route = "需经理 + 财务两级审批(金额 > RM2000)"
+    else:
+        route = "需经理 + 财务 + CFO 三级审批(大额 > RM10000)"
+    if score >= 60:
+        summary = f"⚠️ 高风险单据,建议审批人重点核验票据真实性。预计通过率 {prob:.0f}%。"
+    elif warn_n:
+        summary = f"提示:存在 {warn_n} 项警告(如缺附件),补齐后通过率更高。当前预计 {prob:.0f}%。"
+    else:
+        summary = f"✅ 单据规范,预计顺利通过({prob:.0f}%)。{route}。"
+    return {"levels": levels, "route": route,
+            "pass_prob": round(prob), "summary": summary}
 
 
 @app.post("/api/ocr")
@@ -351,6 +417,53 @@ def batch_decide(req: BatchDecideReq):
         return permissions.deny_payload(req.role, "claim.batch_approve")
     n = db.batch_decide(req.company, req.status, risk_level=req.risk_level)
     return {"affected": n, "stats": db.claim_stats(req.company)}
+
+
+@app.post("/api/claims/{claim_id}/advance")
+def advance_claim_wf(claim_id: str, req: DecideWfReq):
+    """审批流推进 (多级状态机) —— 需 claim.approve 权限。
+    decision ∈ approved/rejected/returned;同意后自动流转下一级。"""
+    if not permissions.can(req.role, "claim.approve"):
+        return permissions.deny_payload(req.role, "claim.approve")
+    res = db.advance_claim(claim_id, req.decision, req.by, req.comment)
+    return res or {"error": "not found"}
+
+
+@app.get("/api/claims/{claim_id}/chain")
+def get_claim_chain(claim_id: str):
+    """查看单据审批链当前状态。"""
+    cl = db.get_claim(claim_id)
+    if not cl:
+        return {"error": "not found"}
+    from app.core import workflow
+    chain = json.loads(cl.get("approval_chain") or "[]")
+    return {"claim_id": claim_id, "status": cl["status"],
+            "cur_level": cl.get("cur_level", 0), "chain": chain,
+            "summary": workflow.chain_summary(chain)}
+
+
+@app.get("/api/payroll/postable")
+def list_postable(company: str = "sg"):
+    """待对接薪资的已批准报销单 (文档 流程3 第5步)。"""
+    rows = db.list_postable_claims(company)
+    total = round(sum(float(r["amount_base"]) for r in rows), 2)
+    return {"claims": rows, "count": len(rows), "total": total}
+
+
+@app.post("/api/payroll/post")
+def post_payroll(req: PostReq):
+    """报销对接处理: 批量过账至发薪日历 —— 需 payroll.process 权限。"""
+    if not permissions.can(req.role, "payroll.run"):
+        return permissions.deny_payload(req.role, "payroll.run")
+    cal = req.pay_calendar or datetime.now().strftime("%Y-%m")
+    res = db.post_to_payroll(req.company, cal, by="薪资管理员")
+    return res
+
+
+@app.get("/api/payroll/batches")
+def list_batches(company: str = "sg"):
+    """已过账批次汇总。"""
+    return {"batches": db.list_batches(company)}
 
 
 @app.get("/api/balance")

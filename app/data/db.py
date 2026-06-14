@@ -81,7 +81,14 @@ CREATE TABLE IF NOT EXISTS claims (
     approver     TEXT,
     decided_at   TEXT,
     created_at   TEXT NOT NULL,
-    source       TEXT DEFAULT 'chat'         -- chat / form / batch
+    source       TEXT DEFAULT 'chat',        -- chat / form / batch
+    receipt_no   TEXT,                        -- 票据编号 (PM-9 重复票据检测)
+    approval_chain TEXT,                       -- 审批链 JSON (workflow 引擎)
+    cur_level    INTEGER NOT NULL DEFAULT 0,   -- 当前待审级别 (0=未进流程)
+    batch_code   TEXT,                          -- 报销对接薪资批次号
+    posted       INTEGER NOT NULL DEFAULT 0,    -- 是否已过账至薪资 (0/1)
+    pay_calendar TEXT,                           -- 发薪日历
+    posted_at    TEXT                            -- 过账时间
 );
 
 CREATE TABLE IF NOT EXISTS family (
@@ -206,6 +213,46 @@ _SEED_CLAIMS_TEMPLATE = [
 ]
 
 
+def _migrate(c: sqlite3.Connection) -> None:
+    """轻量迁移:为老库补充审批流/对接薪资新列 (列已存在则忽略)。"""
+    cols = {r["name"] for r in c.execute("PRAGMA table_info(claims)").fetchall()}
+    adds = [
+        ("receipt_no", "TEXT"), ("approval_chain", "TEXT"),
+        ("cur_level", "INTEGER NOT NULL DEFAULT 0"), ("batch_code", "TEXT"),
+        ("posted", "INTEGER NOT NULL DEFAULT 0"), ("pay_calendar", "TEXT"),
+        ("posted_at", "TEXT"),
+    ]
+    for name, ddl in adds:
+        if name not in cols:
+            try:
+                c.execute(f"ALTER TABLE claims ADD COLUMN {name} {ddl}")
+            except sqlite3.OperationalError:
+                pass
+    c.commit()
+
+
+def find_duplicate_receipt(company: str, emp_id: str, receipt_no: str,
+                           invoice_date: str, amount: float,
+                           type_code: str) -> dict | None:
+    """PM-9 重复票据检测: 同员工+票据号+日期+金额+类型 唯一。"""
+    if not receipt_no:
+        return None
+    return _one(
+        "SELECT id,amount,invoice_date FROM claims WHERE company=? AND emp_id=? "
+        "AND receipt_no=? AND invoice_date=? AND ABS(amount-?)<0.01 AND type_code=? "
+        "AND status!='rejected' LIMIT 1",
+        (company, emp_id, receipt_no, invoice_date, amount, type_code))
+
+
+def approved_total(company: str, emp_id: str, type_code: str) -> float:
+    """该员工该类型 已批准+待批 的累计金额 (限额上限防护)。"""
+    r = _one(
+        "SELECT COALESCE(SUM(amount_base),0) AS s FROM claims WHERE company=? "
+        "AND emp_id=? AND type_code=? AND status IN ('approved','pending','posted')",
+        (company, emp_id, type_code))
+    return float(r["s"]) if r else 0.0
+
+
 def init_db(force_seed: bool = False) -> None:
     """建表 + 首次播种。已存在数据则跳过播种。"""
     with _LOCK:
@@ -213,6 +260,7 @@ def init_db(force_seed: bool = False) -> None:
         try:
             c.executescript(_SCHEMA)
             c.commit()
+            _migrate(c)   # 老库补列 (审批流 / 报销对接薪资)
             n = c.execute("SELECT COUNT(*) AS n FROM employees").fetchone()["n"]
             if n == 0 or force_seed:
                 if force_seed:
@@ -524,14 +572,18 @@ def create_claim(data: dict) -> dict:
     _exec(
         "INSERT INTO claims(id,company,emp_id,emp_name,type_code,type_name,merchant,amount,currency,"
         "amount_base,tax_amount,invoice_date,tax_no,note,risk_score,risk_level,risk_reasons,status,"
-        "created_at,source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "created_at,source,receipt_no,approval_chain,cur_level) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (cid, data.get("company", "sg"), data.get("emp_id", ""), data.get("emp_name", ""),
          data.get("type_code", ""), data.get("type_name", ""), data.get("merchant", ""),
          data.get("amount", 0), data.get("currency", "CNY"), data.get("amount_base", 0),
          data.get("tax_amount", 0), data.get("invoice_date", now[:10]), data.get("tax_no", ""),
          data.get("note", ""), data.get("risk_score", 0), data.get("risk_level", "低"),
          __import__("json").dumps(data.get("risk_reasons", []), ensure_ascii=False),
-         data.get("status", "pending"), now, data.get("source", "chat")),
+         data.get("status", "pending"), now, data.get("source", "chat"),
+         data.get("receipt_no", ""),
+         __import__("json").dumps(data.get("approval_chain", []), ensure_ascii=False),
+         data.get("cur_level", 0)),
     )
     log(data.get("company", "sg"), data.get("emp_name", "员工"), "create_claim", cid,
         f"{data.get('type_name','')} {data.get('amount',0)} {data.get('currency','')}")
@@ -569,6 +621,91 @@ def batch_decide(company: str, status: str, risk_level: str | None = None,
             c.close()
     log(company, approver, f"batch_{status}", risk_level or "all", f"{n} 单")
     return n
+
+
+# ════════════════ 审批流推进 (workflow 引擎落库) ════════════════
+def save_chain(claim_id: str, chain: list, cur_level: int, status: str) -> dict | None:
+    """把审批链状态机推进结果写回单据。"""
+    import json
+    now = _now()
+    _exec("UPDATE claims SET approval_chain=?, cur_level=?, status=?, decided_at=? WHERE id=?",
+          (json.dumps(chain, ensure_ascii=False), cur_level, status, now, claim_id))
+    return get_claim(claim_id)
+
+
+def advance_claim(claim_id: str, decision: str, by: str, comment: str = "") -> dict | None:
+    """
+    按 workflow 状态机推进一笔报销的审批链。
+    decision ∈ approved | rejected | returned
+    返回: {claim, overall, current_level, summary}
+    """
+    import json
+    from app.core import workflow
+    cl = get_claim(claim_id)
+    if not cl:
+        return None
+    chain = json.loads(cl.get("approval_chain") or "[]")
+    if not chain:
+        # 老单据无链 → 即时构建一条 (按金额条件路由)
+        chain = workflow.build_chain("claim", {"amount_base": cl.get("amount_base", 0)})
+    res = workflow.advance(chain, decision, by, comment)
+    overall = res["overall"]
+    status = {"approved": "approved", "rejected": "rejected",
+              "returned": "returned", "in_review": "pending"}[overall]
+    cur_level = res["current_level"] or 0
+    save_chain(claim_id, res["chain"], cur_level if overall == "in_review" else 0, status)
+    log(cl["company"], by, f"wf_{overall}", claim_id,
+        f"L{res.get('current_level')} {comment[:30]}")
+    out = get_claim(claim_id)
+    return {"claim": out, "overall": overall, "current_level": res["current_level"],
+            "summary": workflow.chain_summary(res["chain"])}
+
+
+# ════════════════ 报销对接薪资 (批次过账, 文档 流程3 第5步) ════════════════
+def list_postable_claims(company: str) -> list[dict]:
+    """获取所有 已批准 + 未过账 的报销单 (待对接薪资)。"""
+    return _rows(
+        "SELECT * FROM claims WHERE company=? AND status='approved' AND posted=0 "
+        "ORDER BY decided_at", (company,))
+
+
+def post_to_payroll(company: str, pay_calendar: str, by: str = "薪资管理员") -> dict:
+    """
+    报销对接处理: 把已批准+未过账的报销单批量过账至指定发薪日历。
+    生成批次号, 标记 posted=1, 写入 batch_code / pay_calendar / posted_at。
+    文档: 一旦已过账, 不能通过批量工作流取消。
+    """
+    rows = list_postable_claims(company)
+    if not rows:
+        return {"batch_code": None, "count": 0, "total": 0.0, "claims": []}
+    batch = f"BATCH-{company.upper()}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    now = _now()
+    ids = [r["id"] for r in rows]
+    total = round(sum(float(r["amount_base"]) for r in rows), 2)
+    with _LOCK:
+        c = _conn()
+        try:
+            for cid in ids:
+                c.execute(
+                    "UPDATE claims SET posted=1, status='posted', batch_code=?, "
+                    "pay_calendar=?, posted_at=? WHERE id=?",
+                    (batch, pay_calendar, now, cid))
+            c.commit()
+        finally:
+            c.close()
+    log(company, by, "post_to_payroll", batch,
+        f"{len(ids)} 单 → {pay_calendar} 合计 {total}")
+    return {"batch_code": batch, "count": len(ids), "total": total,
+            "pay_calendar": pay_calendar, "claims": ids}
+
+
+def list_batches(company: str) -> list[dict]:
+    """已过账批次汇总 (供薪资对接面板查看)。"""
+    return _rows(
+        "SELECT batch_code, pay_calendar, posted_at, COUNT(*) AS cnt, "
+        "ROUND(SUM(amount_base),2) AS total FROM claims "
+        "WHERE company=? AND posted=1 GROUP BY batch_code ORDER BY posted_at DESC",
+        (company,))
 
 
 def get_family(emp_id: str | None = None, company: str = "sg") -> list[dict]:

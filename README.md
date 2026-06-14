@@ -10,7 +10,16 @@
 
 ## ✅ 已完成功能
 
-### 📱 移动端用户模式 · 切换即变手机 App(最新)
+### 🔄 业务流程引擎 · 对齐 FRS 规范(最新 · 第一波)
+对照《Paydaes 业务流程与财务报表格式规范》落地三大核心流程:
+- **审批流引擎** (`app/core/workflow.py`):模块无关设计(报销/请假/加班共用),**多级条件路由**(报销 >RM2000 进财务、>RM10000 进 CFO;请假 >3天/>10天 升级)、**委托代理**、**状态机**(submitted→in_review→approved/rejected/returned,退回保留已通过步骤)。
+- **报销 7 条验证规则** (`calc.validate_claim`):单次限额 / 年度限额防护 / **重复票据 PM-9** / **票据日期 PM-10** / 过期报销 / 未来日期 / 必填附件(警告级)。阻止级错误直接拦截入库。
+- **报销对接薪资** (文档流程3 第5步):已批准+未过账单据 → **批次过账**(生成 BATCH 批次号)→ 绑定发薪日历 → 纳入薪资。一旦过账不可撤销。
+- **AI 辅助预判**:提交即给出审批层级解读 + 通过率预测 + 一句话风险摘要(规则推理,零延迟,可接 LLM 增强)。
+- **新增 API**:`POST /api/claims/{id}/advance`(多级审批推进)、`GET /api/claims/{id}/chain`(审批链查询)、`GET /api/payroll/postable`(待对接)、`POST /api/payroll/post`(批次过账)、`GET /api/payroll/batches`(批次汇总)。
+- **数据库迁移**:claims 表新增 receipt_no / approval_chain / cur_level / batch_code / posted / pay_calendar / posted_at(老库自动 ALTER 兼容)。
+
+### 📱 移动端用户模式 · 切换即变手机 App
 - **角色驱动**:切到 **普通员工(employee)** 角色即进入移动端模式(`MOBILE_ROLES=['employee']`),`body.mode-mobile` 一键触发。
 - **手机外壳**:桌面预览时居中 430px 圆角阴影"手机外框"+ 深色衬底;真机(≤480px)自动全屏。隐藏左侧导航树,topbar 收成青色状态栏。
 - **底部 Tab Bar**:首页 / 报销 / 我的 + 凸起的 **AI 助手**圆形主按钮,替代桌面导航。
@@ -239,7 +248,7 @@ pm2 logs claimgpt --nostream     # 查看日志
 - **状态**:✅ 运行中
 - **技术栈**:Python 3.13 + FastAPI + LangGraph 1.2.4 + TailwindCSS + Chart.js
 - **验证**:后端 18/18 模块 + 2集团 + 6角色 + 7国合规全绿;前端桌面+移动端零 JS 错误
-- **最后更新**:2026-06-10(移动端用户模式 + 前端轻量化重构)
+- **最后更新**:2026-06-14(业务流程引擎:审批流+报销验证+对接薪资,对齐 FRS 规范)
 
 ## 🆕 Paydaes HR-Payroll 套件(Pro 方案 · 全量铺开)
 
