@@ -29,110 +29,118 @@ TAX_TABS = ["EPF Rate", "SOCSO Rate", "EIS Rate", "Tax Rate Table",
             "EA Setting", "EC Setting"]
 
 
-def _tax_modules(cur: str) -> dict:
+def _tax_modules(cur: str, country: str = "MY") -> dict:
+    """税务合规 6 子模块 —— 按公司所属国家(country)联动真实税制数据。"""
+    from app.data.tax_data import get_tax_data
+    td = get_tax_data(country)
+    cy = (country or "MY").upper()
+    cur = td.get("currency", cur)        # 以国别币种为准
+    yr = td.get("year", "2026")
+    cats = td.get("categories", ["Resident"])
+    first_cat = cats[0]
+    # 税率表行:取首个税种的累进档(切税种由前端 Tab 控制,数据全量也带上)
+    bracket_rows = td["brackets"].get(first_cat, [])
+    tax_rows = [[str(i + 1)] + list(row) for i, row in enumerate(bracket_rows)]
+    # 全税种的档位(供前端切税种用)
+    brackets_all = {k: [[str(i + 1)] + list(r) for i, r in enumerate(v)]
+                    for k, v in td["brackets"].items()}
+    # 参数
+    param_fields = [F("Tax Year", "dd", yr, True, opts=[yr, str(int(yr) - 1)])]
+    for name, val in td.get("params", []):
+        param_fields.append(F(name, "num", val, False, unit=cur))
+    # 免税/扣除项
+    tp1_rows = [[str(i + 1)] + list(r) for i, r in enumerate(td.get("tp1", []))]
+    # 回单类型
+    receipts = td.get("receipts", ["—"])
+    rcpt_rows = [
+        [f"{receipts[0].split(' ')[0]}-{yr}05-001", receipts[0], f"{yr}-05", "Employee A", f"540 {cur}", "已提交"],
+        [f"{(receipts[1] if len(receipts) > 1 else receipts[0]).split(' ')[0]}-{yr}05-002",
+         receipts[1] if len(receipts) > 1 else receipts[0], f"{yr}-05", "Employee B", f"320 {cur}", "已提交"],
+    ]
+    ea_name = td.get("ea_form", "EA Form")
+    ec_name = td.get("ec_form", "EC Form")
+
     return {
-        # ① Tax Rate Table —— Inline Table 行编辑 + 横滚 Tab 群
+        # ① Tax Rate Table —— Inline Table 行编辑 + 横滚 Tab 群(按国别税种/税率)
         "tax_rate": {
             "title": "Tax Rate Table · 税率表", "domain": "税务合规",
-            "desc": "维护各税种(RES/NON/REP/KNO/CSU)的应税区间与税率,支持分级累进",
+            "country": cy, "authority": td.get("authority", ""),
+            "desc": f"维护 {cy} 各税种({' / '.join(c.split(' - ')[0].split(' (')[0] for c in cats)})的应税区间与税率,支持分级累进 · 主管:{td.get('authority','')}",
             "layout": "p_inline", "tabs_top": TAX_TABS, "tabs_active": 3,
             "actions": ["+ Add Row", "AI 自动算税"],
             "header_fields": [
-                F("Tax Year", "dd", "2026", True, opts=["2026", "2025", "2024"]),
-                F("Tax Category", "dd", "RES - Resident", True,
-                  opts=["RES - Resident", "NON - Non-Resident", "REP - Returning Expert",
-                        "KNO - Knowledge Worker", "CSU - Civil Servant"]),
-                F("Effective Date", "date", "2026-01-01", True),
+                F("Tax Year", "dd", yr, True, opts=[yr, str(int(yr) - 1), str(int(yr) - 2)]),
+                F("Tax Category", "dd", first_cat, True, opts=cats),
+                F("Effective Date", "date", f"{yr}-01-01", True),
                 F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
             ],
-            "columns": ["No", "Chargeable Income From", "To", "Rate (%)", "Cumulative Tax"],
-            "rows": [
-                ["1", "0", "5,000", "0", "0"],
-                ["2", "5,001", "20,000", "1", "150"],
-                ["3", "20,001", "35,000", "3", "600"],
-                ["4", "35,001", "50,000", "8", "1,800"],
-                ["5", "50,001", "70,000", "13", "4,400"],
-                ["6", "70,001", "100,000", "21", "10,700"],
-            ],
+            "columns": ["No", "Chargeable Income From", "To", "Rate (%)", f"Cumulative Tax ({cur})"],
+            "rows": tax_rows,
+            "brackets_all": brackets_all,   # 前端切税种用
         },
-        # ② Tax Parameters —— 详情表单
+        # ② Tax Parameters —— 详情表单(国别法定参数)
         "tax_param": {
             "title": "Tax Parameters · 税务参数", "domain": "税务合规",
-            "desc": "EPF 上限、个人/配偶/子女减免额等法定参数配置",
+            "country": cy, "authority": td.get("authority", ""),
+            "desc": f"{cy} 法定减免/上限参数配置(币种 {cur}) · 主管:{td.get('authority','')}",
             "layout": "p_detail", "tabs_top": TAX_TABS, "tabs_active": 4,
             "actions": ["Save Changes"],
-            "fields": [
-                F("Tax Year", "dd", "2026", True, opts=["2026", "2025"]),
-                F("EPF Limit", "num", "4000", True, unit=cur),
-                F("Individual Deduction", "num", "9000", True, unit=cur),
-                F("Spouse Deduction", "num", "4000", True, unit=cur),
-                F("Child Deduction (per child)", "num", "2000", True, unit=cur),
-                F("Disabled Individual Add-on", "num", "6000", False, unit=cur),
-                F("Life Insurance & EPF Limit", "num", "7000", False, unit=cur),
-                F("Medical / Education Insurance", "num", "3000", False, unit=cur),
-            ],
+            "fields": param_fields,
         },
-        # ③ Tax Exemption Limit (TP1) —— Inline Table(13 NP 项)
+        # ③ Tax Exemption Limit (TP1) —— Inline Table(国别免税/扣除项)
         "tax_tp1": {
             "title": "Tax Exemption Limit (TP1) · 免税限额", "domain": "税务合规",
-            "desc": "TP1 表单的 13 项免税项目(NP)年度限额配置",
+            "country": cy,
+            "desc": f"{cy} 年度免税/扣除项目限额配置(币种 {cur})",
             "layout": "p_inline", "tabs_top": TAX_TABS, "tabs_active": 5,
             "actions": ["+ Add Row"],
             "header_fields": [
-                F("Tax Year", "dd", "2026", True, opts=["2026", "2025"]),
+                F("Tax Year", "dd", yr, True, opts=[yr, str(int(yr) - 1)]),
                 F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
             ],
-            "columns": ["No", "NP Code", "Exemption Item", "Annual Limit", "Per Claim"],
-            "rows": [
-                ["1", "NP01", "Petrol / Travelling Allowance", f"6,000 {cur}", "—"],
-                ["2", "NP02", "Parking Allowance", "Full", "—"],
-                ["3", "NP03", "Meal Allowance", "Full", "—"],
-                ["4", "NP04", "Childcare Allowance", f"2,400 {cur}", "—"],
-                ["5", "NP05", "Gift / Award (Long Service)", f"2,000 {cur}", "—"],
-                ["6", "NP06", "Medical / Dental Benefit", "Full", "—"],
-            ],
+            "columns": ["No", "Code", "Exemption / Deduction Item", f"Annual Limit ({cur})", "Per Claim"],
+            "rows": tp1_rows,
         },
-        # ④ Tax Receipt —— 列表页(PCB/CP38 月度回单)
+        # ④ Tax Receipt —— 列表页(国别月度回单)
         "tax_receipt": {
             "title": "Tax Receipt · 税务回单", "domain": "税务合规",
-            "desc": "PCB(月度预扣税)/ CP38(法院扣令)月度回单管理",
+            "country": cy,
+            "desc": f"{cy} 月度预扣/申报回单管理({' / '.join(receipts)})",
             "layout": "p_list", "tabs_top": TAX_TABS, "tabs_active": 6,
             "actions": ["Download", "+ Add"],
             "filters": ["Tax Year", "Receipt Type", "Month"],
             "columns": ["Receipt No", "Type", "Month", "Employee", "Amount", "Status"],
-            "rows": [
-                ["PCB-202605-001", "PCB", "2026-05", "Ruby Rose", f"540 {cur}", "已提交"],
-                ["CP38-202605-002", "CP38", "2026-05", "John Tan", f"320 {cur}", "已提交"],
-                ["PCB-202604-001", "PCB", "2026-04", "Ruby Rose", f"520 {cur}", "已提交"],
-            ],
+            "rows": rcpt_rows,
         },
-        # ⑤ EA Setting —— 穿梭框
+        # ⑤ EA Setting —— 穿梭框(国别年度个税表名称)
         "ea_setting": {
-            "title": "EA Setting · EA 表单配置", "domain": "税务合规",
-            "desc": "将薪资 Earnings 要素映射到法定 EA 表单栏位(年度个税表)",
+            "title": f"EA Setting · {ea_name} 配置", "domain": "税务合规",
+            "country": cy,
+            "desc": f"将薪资 Earnings 要素映射到 {cy} 法定年度申报表「{ea_name}」栏位",
             "layout": "p_shuttle", "tabs_top": TAX_TABS, "tabs_active": 7,
             "actions": ["Save Changes", "AI 自动归集"],
             "header_fields": [
-                F("From Tax Year", "dd", "2026", True, opts=["2026", "2025"]),
-                F("Email Template ID", "dd", "EA_2026_TPL", False,
-                  opts=["EA_2026_TPL", "EA_DEFAULT"]),
+                F("From Tax Year", "dd", yr, True, opts=[yr, str(int(yr) - 1)]),
+                F("Form", "ro", ea_name, False),
             ],
             "shuttle_left_title": "可选 Earnings 要素",
-            "shuttle_right_title": "已映射到 EA 栏位",
+            "shuttle_right_title": f"已映射到 {ea_name}",
             "left": ["基本工资", "加班费", "全勤奖", "交通津贴", "餐补", "绩效奖金", "年终奖"],
             "right": ["基本工资", "绩效奖金", "年终奖"],
         },
-        # ⑥ EC Setting —— 穿梭框
+        # ⑥ EC Setting —— 穿梭框(国别雇主申报表名称)
         "ec_setting": {
-            "title": "EC Setting · EC 表单配置", "domain": "税务合规",
-            "desc": "EC 表单(雇主薪酬申报)的 Earnings 要素映射",
+            "title": f"EC Setting · {ec_name} 配置", "domain": "税务合规",
+            "country": cy,
+            "desc": f"{cy} 雇主薪酬申报表「{ec_name}」的 Earnings 要素映射",
             "layout": "p_shuttle", "tabs_top": TAX_TABS, "tabs_active": 8,
             "actions": ["Save Changes"],
             "header_fields": [
-                F("From Tax Year", "dd", "2026", True, opts=["2026", "2025"]),
+                F("From Tax Year", "dd", yr, True, opts=[yr, str(int(yr) - 1)]),
+                F("Form", "ro", ec_name, False),
             ],
             "shuttle_left_title": "可选 Earnings 要素",
-            "shuttle_right_title": "已映射到 EC 栏位",
+            "shuttle_right_title": f"已映射到 {ec_name}",
             "left": ["基本工资", "加班费", "全勤奖", "交通津贴", "餐补", "绩效奖金"],
             "right": ["基本工资", "加班费"],
         },
@@ -461,10 +469,11 @@ _FILTER_EN = {
 }
 
 
-def get_paydaes_module(module_id: str, cur: str = "MYR", lang: str = "zh") -> dict | None:
-    """返回 Paydaes 6 大域模块视图;不存在返回 None(交回原 18 模块逻辑)"""
+def get_paydaes_module(module_id: str, cur: str = "MYR", lang: str = "zh", country: str = "MY") -> dict | None:
+    """返回 Paydaes 6 大域模块视图;不存在返回 None(交回原 18 模块逻辑)。
+    country = 公司所属国家代码(SG/MY/TH/VN/ID/HK/CN),税务合规模块据此联动真实税制。"""
     registry = {}
-    registry.update(_tax_modules(cur))
+    registry.update(_tax_modules(cur, country))
     registry.update(_leave_modules(cur))
     registry.update(_ta_modules(cur))
     registry.update(_acc_modules(cur))

@@ -206,12 +206,13 @@ def compliance(country: str | None = None):
 def module_data(module_id: str, company: str = "sg", lang: str = "zh"):
     """返回某个模块的工作区数据(表格/卡片)"""
     # 先查 Paydaes 6 大域(税务/假期/考勤/财务/主数据/法定表单)
-    cur = "MYR"
+    cur = "MYR"; country = "MY"
     for g in enterprise.GROUPS:
         for c in g["companies"]:
             if c["id"] == company:
                 cur = c.get("currency", "MYR")
-    pm = paydaes_modules.get_paydaes_module(module_id, cur, lang)
+                country = c.get("country", "MY")
+    pm = paydaes_modules.get_paydaes_module(module_id, cur, lang, country)
     if pm is not None:
         return pm
     # 回退原 18 模块逻辑

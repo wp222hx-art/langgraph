@@ -89,6 +89,14 @@ body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI",
 .ptab{ padding:9px 14px; font-size:13px; color:#64748b; white-space:nowrap; cursor:pointer; border-bottom:2px solid transparent; transition:all .12s; }
 .ptab:hover{ color:#0d9488; }
 .ptab.active{ color:#0d9488; font-weight:600; border-bottom-color:#20c997; }
+.ptab-clk:hover{ background:#f0fdfa; border-radius:8px 8px 0 0; }
+.ptab-wip{ color:#cbd5e1; cursor:not-allowed; }
+.ptab-wip:hover{ color:#cbd5e1; }
+/* Inline 表行编辑态 */
+.pf-cellinput{ cursor:text; }
+.pf-cellinput:hover{ border-bottom-color:#5eead4; background:#f0fdfa; }
+.pf-cell-edit{ width:100%; min-width:80px; height:30px; border:1px solid #5eead4; border-radius:7px; padding:0 8px; font-size:13px; color:#1e293b; box-shadow:0 0 0 3px rgba(43,217,194,.12); outline:none; }
+.pf-realselect{ cursor:pointer; outline:none; appearance:none; -webkit-appearance:none; background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L2 4h8z'/%3E%3C/svg%3E") no-repeat right 12px center; padding-right:30px; }
 
 /* 内部子 Tab */
 .ptab2-bar{ display:flex; gap:18px; border-bottom:1px solid #e8edf3; margin-bottom:20px; }

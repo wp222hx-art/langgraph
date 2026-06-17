@@ -1788,11 +1788,23 @@ function aiScroll() { const m = $('#ai-messages'); m.scrollTop = m.scrollHeight;
 //  Paydaes 7 块积木渲染器(Pro 方案 · 数据驱动)
 // ═══════════════════════════════════════════════════════════
 
-// 横滚 Tab 群(Tax 家族顶部)
+// Tax 家族横滚 Tab → 对应模块 navId(无模块者为 null = 建设中)
+const TAX_TAB_NAV = {
+  'EPF Rate': null, 'SOCSO Rate': null, 'EIS Rate': null,
+  'Tax Rate Table': 'tax_rate', 'Tax Parameters': 'tax_param',
+  'Tax Exemption (TP1)': 'tax_tp1', 'Tax Receipt': 'tax_receipt',
+  'EA Setting': 'ea_setting', 'EC Setting': 'ec_setting',
+};
+// 横滚 Tab 群(Tax 家族顶部)—— 可点击切换子模块
 function topTabsBar(m) {
   const act = m.tabs_active ?? 0;
   return `<div class="ptab-bar mb-4">
-    ${m.tabs_top.map((t, i) => `<div class="ptab ${i === act ? 'active' : ''}">${t}</div>`).join('')}
+    ${m.tabs_top.map((tab, i) => {
+      const nav = TAX_TAB_NAV[tab];
+      const clickable = !!nav;
+      const onclick = clickable ? `onclick="go('${nav}')"` : `onclick="toast('${tab} ' + (t('tax.tab_wip')||'功能建设中'))"`;
+      return `<div class="ptab ${i === act ? 'active' : ''} ${clickable ? 'ptab-clk' : 'ptab-wip'}" ${onclick}>${tab}</div>`;
+    }).join('')}
   </div>`;
 }
 
@@ -1851,20 +1863,91 @@ function pDetailView(m) {
   </div>`;
 }
 
-// ② Inline Table 行编辑(行尾 ⊕ / 垃圾桶 + 顶部头字段 + 分页）
-function pInlineView(m) {
-  const head = m.header_fields ? `<div class="mb-5">${pFieldGrid(m.header_fields)}</div>` : '';
-  const cols = (m.columns || []).map(c => `<th>${c}</th>`).join('') + `<th class="text-right">${t('common.action')}</th>`;
-  const rows = (m.rows || []).map((r, idx) => `<tr>
-    ${r.map((c, ci) => `<td>${ci === 0 ? c : `<span class="pf-cellinput">${esc(String(c))}</span>`}</td>`).join('')}
+// 当前 Inline 表运行态(支持切税种 / 行编辑)
+let _inlineState = null;
+
+// 渲染 Inline 表的 tbody(可点开行编辑)
+function pInlineRows(rows) {
+  return rows.map((r, idx) => `<tr data-ri="${idx}">
+    ${r.map((c, ci) => ci === 0
+      ? `<td class="text-slate-400">${esc(String(c))}</td>`
+      : `<td><span class="pf-cellinput" onclick="inlineEditCell(${idx},${ci},this)">${esc(String(c))}</span></td>`).join('')}
     <td class="text-right whitespace-nowrap">
-      <button class="pf-rowbtn add"><i class="fas fa-plus"></i></button>
-      <button class="pf-rowbtn del"><i class="fas fa-trash-can"></i></button>
+      <button class="pf-rowbtn add" title="${t('common.add')||'新增'}" onclick="inlineAddRow(${idx})"><i class="fas fa-plus"></i></button>
+      <button class="pf-rowbtn del" title="${t('common.delete')||'删除'}" onclick="inlineDelRow(${idx})"><i class="fas fa-trash-can"></i></button>
     </td></tr>`).join('');
+}
+
+// 单元格点开 → 变 input，失焦/回车回写
+function inlineEditCell(ri, ci, span) {
+  if (!_inlineState) return;
+  const cur = _inlineState.rows[ri][ci];
+  const inp = document.createElement('input');
+  inp.className = 'pf-cell-edit';
+  inp.value = cur;
+  const commit = () => {
+    _inlineState.rows[ri][ci] = inp.value;
+    const s = document.createElement('span');
+    s.className = 'pf-cellinput';
+    s.textContent = inp.value;
+    s.onclick = () => inlineEditCell(ri, ci, s);
+    inp.replaceWith(s);
+  };
+  inp.onblur = commit;
+  inp.onkeydown = (e) => { if (e.key === 'Enter') inp.blur(); };
+  span.replaceWith(inp);
+  inp.focus(); inp.select();
+}
+window.inlineEditCell = inlineEditCell;
+
+function inlineAddRow(after) {
+  if (!_inlineState) return;
+  const ncol = _inlineState.rows[0] ? _inlineState.rows[0].length : 5;
+  const blank = Array(ncol).fill(''); blank[0] = String(after + 2);
+  _inlineState.rows.splice(after + 1, 0, blank);
+  _inlineState.rows.forEach((r, i) => r[0] = String(i + 1));
+  refreshInlineBody();
+}
+window.inlineAddRow = inlineAddRow;
+
+function inlineDelRow(ri) {
+  if (!_inlineState || _inlineState.rows.length <= 1) { toast(t('tax.min_one_row') || '至少保留一行'); return; }
+  _inlineState.rows.splice(ri, 1);
+  _inlineState.rows.forEach((r, i) => r[0] = String(i + 1));
+  refreshInlineBody();
+}
+window.inlineDelRow = inlineDelRow;
+
+function refreshInlineBody() {
+  const tb = document.querySelector('#inline-tbody');
+  if (tb) tb.innerHTML = pInlineRows(_inlineState.rows);
+}
+
+// 切换税种(Tax Category）→ 表格换成该税种的累进档
+function inlineSwitchCategory(sel) {
+  if (!_inlineState || !_inlineState.brackets) return;
+  const rows = _inlineState.brackets[sel.value];
+  if (rows) { _inlineState.rows = rows.map(r => r.slice()); refreshInlineBody(); }
+}
+window.inlineSwitchCategory = inlineSwitchCategory;
+
+// ② Inline Table 行编辑(可点开编辑 + 切税种联动 + 增删行 + 分页）
+function pInlineView(m) {
+  _inlineState = { rows: (m.rows || []).map(r => r.slice()), brackets: m.brackets_all || null };
+  // 头字段:Tax Category 用真 <select> 触发切税种
+  const head = m.header_fields ? `<div class="mb-5"><div class="pf-grid">${m.header_fields.map(f => {
+    if (f.label === 'Tax Category' && m.brackets_all) {
+      const opts = (f.opts || []).map(o => `<option ${o === f.value ? 'selected' : ''}>${esc(o)}</option>`).join('');
+      return `<div class="pf-cell"><label class="pf-label">${f.label} <span class="text-rose-500">*</span></label>
+        <select class="pf-input pf-realselect" onchange="inlineSwitchCategory(this)">${opts}</select></div>`;
+    }
+    return pField(f);
+  }).join('')}</div></div>` : '';
+  const cols = (m.columns || []).map(c => `<th>${c}</th>`).join('') + `<th class="text-right">${t('common.action')}</th>`;
   return `<div class="panel p-5 md:p-6">
     ${head}
     <div class="table-wrap"><table class="dtable">
-      <thead><tr>${cols}</tr></thead><tbody>${rows}</tbody>
+      <thead><tr>${cols}</tr></thead><tbody id="inline-tbody">${pInlineRows(_inlineState.rows)}</tbody>
     </table></div>
     ${pPager(3, 1)}
     ${pFooter()}
