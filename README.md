@@ -10,6 +10,16 @@
 
 ## ✅ 已完成功能
 
+### 🔗 Company Code 全域联动 + 公式查询体系(最新 · 第十一波)
+把"写死值"彻底消灭,并把公式编辑器升级为**可查询的帮助系统**:
+- **Company Code 随公司联动**:此前所有模块的 `Company Code` 硬编码为 `COM01/COM05`,现在改为读取所选公司的真实公司代码(`PDS-SG / PDS-MY / PDS-TH / PDS-VN / PDS-ID / HZN-HK / HZN-CN`)。班次/排班组/假日表/加班/会计科目表的公司代码、假期权益的国家代码(`SG/MY/...`)、打卡地点与银行的国家全名(`Singapore/Malaysia/...`)全部随公司切换实时变化。
+- **企业数据层补全**:`enterprise.py` 7 家公司新增 `code` 字段;`get_paydaes_module()` 与各域模块函数(`_leave/_ta/_acc/_master_modules`)接收 `code`/`country` 参数动态注入。
+- **全系统串联体检**:审计 19 个导航叶子节点 → 100% 映射到后端模块且均有合法 layout;遍历 7 公司 × 18 模块,确认公司/国家相关字段全部联动(唯会计科目 Entity 维度按业务正常保留固定)。
+- **公式查询助手(Formula Helper)**:原"自然语言生成公式"按钮(只是丢给通用 AI 聊天)重做为内置查询体系浮层 —— **6 个场景化公式模板**(司龄阶梯/已婚女性额外假/Pro Rata 折算/结转封顶/加班费/职级津贴)+ **10 个函数手册**(IF/AND/OR/NOT/ROUND/MIN/MAX/ABS/CEIL/FLOOR,含中英签名+示例)+ **12 个变量字典**;支持中英文关键词检索(如"加班/overtime/司龄"),点击模板/函数示例/变量名直接插入公式编辑器,再配合"运行试算"实时计算。
+- **API**:`GET /api/formula/help?q=<关键词>`(返回 templates/functions/variables + 检索命中)。
+- **只读字段修复**:`ro` 类型字段改 `disabled`→`readonly` 并补 `data-label`,使 Company Code 等关键标识可被收集/回显/定位。
+- 全程中英双语;Playwright E2E 全绿(SG→PDS-SG / CN→HZN-CN;助手 6 模板/搜索命中/插入成功;0 JS 错误)。
+
 ### 📱 员工自助门户「我的」· 手机端深度适配(最新 · 第五波)
 针对普通员工(employee 角色 = 移动 App 体验)重做个人中心,从"空壳入口列表"升级为**真数据驱动的自助门户**:
 

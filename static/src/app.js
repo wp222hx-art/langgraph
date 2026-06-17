@@ -1839,7 +1839,7 @@ function pField(f, idx) {
   const keyLabel = f.label_key || f.label_en || f.label || '';
   const fid = (idx != null ? `data-pf="${idx}" ` : '') + `data-label="${esc(keyLabel)}"`;
   if (f.type === 'ro')
-    ctrl = `<input class="pf-input pf-ro" value="${esc(f.value)}" disabled>`;
+    ctrl = `<input class="pf-input pf-ro" value="${esc(f.value)}" ${fid} readonly>`;
   else if (f.type === 'dd')
     ctrl = `<select class="pf-input pf-realselect" ${fid}>${(f.opts || []).map(o =>
       `<option ${o === f.value ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
@@ -2185,7 +2185,7 @@ function pFormulaView(m) {
     ${head}
     <div class="flex items-center justify-between mb-2">
       <label class="pf-label mb-0">${flabel} <span class="text-rose-500">*</span></label>
-      <button class="btn btn-ai text-xs py-1" onclick="openAI('HRStrategist','把这条假期资格规则翻译成公式')"><i class="fas fa-wand-magic-sparkles"></i> ${S.lang === 'en' ? 'NL→Formula' : '自然语言生成公式'}</button>
+      <button class="btn btn-ai text-xs py-1" onclick="fxHelpOpen()"><i class="fas fa-wand-magic-sparkles"></i> ${S.lang === 'en' ? 'Formula Helper' : '公式查询助手'}</button>
     </div>
     <textarea class="fx-editor fx-editable" id="fx-area" spellcheck="false">${esc(m.formula || defaultFormula)}</textarea>
     <div class="fx-toolbar">${vars}</div>
@@ -2210,6 +2210,114 @@ function fxInsert(token) {
 function fxInsertEl(el) { fxInsert(el.getAttribute('data-tok') || el.textContent || ''); }
 window.fxInsert = fxInsert;
 window.fxInsertEl = fxInsertEl;
+
+// ── 公式查询助手 (Formula Helper) —— 真正的查询体系: 函数手册/变量字典/场景模板 ──
+let _fxHelpCache = null;
+const _isEn = () => S.lang === 'en';
+async function fxHelpOpen() {
+  if (document.getElementById('fxhelp-mask')) return;
+  const T = _isEn();
+  const html = `<div id="fxhelp-mask" class="fxhelp-mask" onclick="if(event.target===this)fxHelpClose()">
+    <div class="fxhelp-panel" role="dialog">
+      <div class="fxhelp-head">
+        <div class="fxhelp-title"><i class="fas fa-wand-magic-sparkles"></i> ${T ? 'Formula Helper' : '公式查询助手'}</div>
+        <button class="fxhelp-x" onclick="fxHelpClose()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="fxhelp-search">
+        <i class="fas fa-search"></i>
+        <input id="fxhelp-q" placeholder="${T ? 'Describe what you want, e.g. overtime, service tier...' : '描述你想算什么,如:加班、司龄阶梯、按比例折算…'}"
+          oninput="fxHelpSearch(this.value)">
+      </div>
+      <div class="fxhelp-tabs">
+        <span class="fxhelp-tab active" data-tab="tpl" onclick="fxHelpTab('tpl')">${T ? 'Templates' : '场景模板'}</span>
+        <span class="fxhelp-tab" data-tab="fn" onclick="fxHelpTab('fn')">${T ? 'Functions' : '函数手册'}</span>
+        <span class="fxhelp-tab" data-tab="var" onclick="fxHelpTab('var')">${T ? 'Variables' : '变量字典'}</span>
+      </div>
+      <div id="fxhelp-body" class="fxhelp-body"><div class="fxhelp-empty"><i class="fas fa-spinner fa-spin"></i></div></div>
+    </div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  if (!_fxHelpCache) {
+    try { _fxHelpCache = await api('/api/formula/help', null, 'GET'); }
+    catch (e) { _fxHelpCache = { templates: [], functions: [], variables: [] }; }
+  }
+  _fxHelpTab = 'tpl';
+  fxHelpRender(_fxHelpCache);
+  setTimeout(() => { const i = document.getElementById('fxhelp-q'); if (i) i.focus(); }, 60);
+}
+function fxHelpClose() { const m = document.getElementById('fxhelp-mask'); if (m) m.remove(); }
+let _fxHelpTab = 'tpl';
+function fxHelpTab(tab) {
+  _fxHelpTab = tab;
+  document.querySelectorAll('.fxhelp-tab').forEach(el =>
+    el.classList.toggle('active', el.getAttribute('data-tab') === tab));
+  fxHelpRender(_fxHelpCache);
+}
+let _fxHelpTimer = null;
+function fxHelpSearch(q) {
+  clearTimeout(_fxHelpTimer);
+  _fxHelpTimer = setTimeout(async () => {
+    const query = (q || '').trim();
+    if (!query) { _fxHelpTab = 'tpl'; fxHelpTab('tpl'); return; }
+    let data;
+    try { data = await api('/api/formula/help?q=' + encodeURIComponent(query), null, 'GET'); }
+    catch (e) { return; }
+    fxHelpRenderSearch(data);
+  }, 220);
+}
+function _tplCard(tpl) {
+  const T = _isEn();
+  const title = esc(T && tpl.title_en ? tpl.title_en : tpl.title);
+  const f = esc(tpl.formula);
+  return `<div class="fxhelp-card">
+    <div class="fxhelp-card-h"><span class="fxhelp-badge">${esc(tpl.domain)}</span><b>${title}</b></div>
+    <pre class="fxhelp-code">${f}</pre>
+    <div class="fxhelp-card-act">
+      <button class="btn btn-secondary text-xs py-1" onclick='fxHelpUse(${JSON.stringify(tpl.formula)})'><i class="fas fa-arrow-down"></i> ${T ? 'Insert' : '插入编辑器'}</button>
+    </div></div>`;
+}
+function _fnRow(f) {
+  const T = _isEn();
+  return `<div class="fxhelp-fn">
+    <div class="fxhelp-fn-h"><code>${esc(T && f.sig_en ? f.sig_en : f.sig)}</code><span class="fxhelp-cat">${esc(f.cat)}</span></div>
+    <div class="fxhelp-fn-d">${esc(T && f.desc_en ? f.desc_en : f.desc)}</div>
+    <div class="fxhelp-fn-ex" onclick='fxHelpUse(${JSON.stringify(f.example)})' title="${T ? 'Click to insert' : '点击插入'}"><i class="fas fa-code"></i> ${esc(f.example)}</div>
+  </div>`;
+}
+function _varRow(v) {
+  const T = _isEn();
+  return `<div class="fxhelp-var" onclick='fxHelpUse(${JSON.stringify(v.name)})' title="${T ? 'Click to insert' : '点击插入'}">
+    <code>${esc(v.name)}</code><span>${esc(T && v.desc_en ? v.desc_en : v.desc)}</span><em>${esc(v.domain)}</em></div>`;
+}
+function fxHelpRender(data) {
+  const body = document.getElementById('fxhelp-body'); if (!body || !data) return;
+  const T = _isEn();
+  if (_fxHelpTab === 'tpl') {
+    body.innerHTML = (data.templates || []).map(_tplCard).join('') ||
+      `<div class="fxhelp-empty">${T ? 'No templates' : '暂无模板'}</div>`;
+  } else if (_fxHelpTab === 'fn') {
+    body.innerHTML = (data.functions || []).map(_fnRow).join('');
+  } else {
+    body.innerHTML = (data.variables || []).map(_varRow).join('');
+  }
+}
+function fxHelpRenderSearch(data) {
+  const body = document.getElementById('fxhelp-body'); if (!body) return;
+  const T = _isEn();
+  let html = '';
+  if (data.templates && data.templates.length)
+    html += `<div class="fxhelp-sec">${T ? 'Matched Templates' : '匹配模板'}</div>` + data.templates.map(_tplCard).join('');
+  if (data.functions && data.functions.length)
+    html += `<div class="fxhelp-sec">${T ? 'Matched Functions' : '匹配函数'}</div>` + data.functions.map(_fnRow).join('');
+  body.innerHTML = html || `<div class="fxhelp-empty"><i class="fas fa-circle-info"></i> ${T ? 'No match. Try keywords like overtime / service / pro-rata.' : '没有匹配。试试关键词:加班 / 司龄 / 折算 / 结转。'}</div>`;
+}
+function fxHelpUse(formula) {
+  const ta = document.getElementById('fx-area');
+  if (ta) { ta.value = formula; ta.focus(); }
+  fxHelpClose();
+  toast(_isEn() ? 'Formula inserted — adjust variables then Run Test' : '已插入公式 — 可改试算变量后点「运行试算」');
+}
+window.fxHelpOpen = fxHelpOpen; window.fxHelpClose = fxHelpClose;
+window.fxHelpTab = fxHelpTab; window.fxHelpSearch = fxHelpSearch; window.fxHelpUse = fxHelpUse;
 // 收集试算变量(自动把数字字符串转 number,true/false 转布尔)
 function fxCollectVars() {
   const vars = {};

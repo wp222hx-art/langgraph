@@ -23,6 +23,19 @@ def F(label, ftype="t", value="", req=False, unit="", opts=None, hint=""):
             "unit": unit, "opts": opts or [], "hint": hint}
 
 
+# 国家代码 → 英文国家全名(供 Country 下拉框默认值联动)
+_COUNTRY_NAME = {
+    "SG": "Singapore", "MY": "Malaysia", "TH": "Thailand", "VN": "Vietnam",
+    "ID": "Indonesia", "HK": "Hong Kong", "CN": "China",
+}
+# 全量国家下拉选项(7 国)
+_COUNTRY_OPTS = list(_COUNTRY_NAME.values())
+
+
+def _country_name(country: str) -> str:
+    return _COUNTRY_NAME.get((country or "MY").upper(), "Malaysia")
+
+
 # Tax 家族顶部横滚 Tab 群(对应真实截图)
 TAX_TABS = ["EPF Rate", "SOCSO Rate", "EIS Rate", "Tax Rate Table",
             "Tax Parameters", "Tax Exemption (TP1)", "Tax Receipt",
@@ -150,7 +163,7 @@ def _tax_modules(cur: str, country: str = "MY") -> dict:
 # ═══════════════════════════════════════════════════════════
 #  🏖️ Leave 假期域
 # ═══════════════════════════════════════════════════════════
-def _leave_modules(cur: str) -> dict:
+def _leave_modules(cur: str, country: str = "MY") -> dict:
     return {
         # Leave Entitlement —— Formula 公式编辑器(AI 自然语言生成预埋点)
         "leave_entitlement": {
@@ -159,7 +172,7 @@ def _leave_modules(cur: str) -> dict:
             "layout": "p_formula",
             "actions": ["Save Changes", "新增权益"],
             "header_fields": [
-                F("Country Code", "ro", "MY", True),
+                F("Country Code", "ro", country, True),
                 F("Entitlement Code", "t", "AL-STD-2026", True),
                 F("Effective Date", "date", "2026-01-01", True),
                 F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
@@ -213,7 +226,7 @@ def _leave_modules(cur: str) -> dict:
 # ═══════════════════════════════════════════════════════════
 #  ⏰ Time & Attendance 考勤域
 # ═══════════════════════════════════════════════════════════
-def _ta_modules(cur: str) -> dict:
+def _ta_modules(cur: str, code: str = "PDS-MY", country: str = "MY") -> dict:
     return {
         # Shift —— 详情表单(含弹性班次单选 + 宽限期)
         "shift": {
@@ -222,7 +235,7 @@ def _ta_modules(cur: str) -> dict:
             "layout": "p_detail",
             "actions": ["Save Changes", "+ Add"],
             "fields": [
-                F("Company Code", "ro", "COM01", True),
+                F("Company Code", "ro", code, True),
                 F("Shift Code", "t", "AFTERNOON", True),
                 F("Effective Date", "date", "2024-05-03", True),
                 F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
@@ -241,7 +254,7 @@ def _ta_modules(cur: str) -> dict:
             "layout": "p_inline",
             "actions": ["+ Add Row", "AI 智能排班"],
             "header_fields": [
-                F("Company Code", "ro", "COM01", True),
+                F("Company Code", "ro", code, True),
                 F("Schedule Group Code", "t", "FUTURE1", True),
                 F("Effective Date", "date", "2027-01-12", True),
                 F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
@@ -260,7 +273,7 @@ def _ta_modules(cur: str) -> dict:
             "layout": "p_inline",
             "actions": ["+ Add Row"],
             "header_fields": [
-                F("Company Code", "ro", "COM01", True),
+                F("Company Code", "ro", code, True),
                 F("Year", "dd", "2026", True, opts=["2026", "2025"]),
                 F("State", "dd", "Selangor", False, opts=["Selangor", "Kuala Lumpur", "Penang", "Johor"]),
                 F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
@@ -285,7 +298,7 @@ def _ta_modules(cur: str) -> dict:
                 F("Location Name", "t", "Paydaes HQ Tower", True),
                 F("Location Address", "area", "Level 12, Menara KL, Jalan Sultan Ismail", False, hint="请输入地址…"),
                 F("Postcode", "t", "50250", False),
-                F("Country", "dd", "Malaysia", False, opts=["Malaysia", "Singapore", "Thailand"]),
+                F("Country", "dd", _country_name(country), False, opts=_COUNTRY_OPTS),
                 F("State", "dd", "Kuala Lumpur", False, opts=["Kuala Lumpur", "Selangor"]),
                 F("Maximum Radius", "num", "500", False, unit="米"),
             ],
@@ -298,7 +311,7 @@ def _ta_modules(cur: str) -> dict:
             "actions": ["Save Changes", "AI 异常检测"],
             "sub_tabs": ["General", "Rules", "Overtime Type"],
             "fields": [
-                F("Company Code", "ro", "COM05", True),
+                F("Company Code", "ro", code, True),
                 F("Effective Date", "date", "2025-11-11", True),
                 F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
                 F("Monthly Overtime Maximum Hours", "num", "104", True, unit="小时"),
@@ -312,7 +325,7 @@ def _ta_modules(cur: str) -> dict:
 # ═══════════════════════════════════════════════════════════
 #  📒 Accounting 财务域
 # ═══════════════════════════════════════════════════════════
-def _acc_modules(cur: str) -> dict:
+def _acc_modules(cur: str, code: str = "PDS-MY", country: str = "MY") -> dict:
     return {
         # Chart of Accounts —— Tabset(Chartfields/COA Mapping/Remapping)
         "coa": {
@@ -322,7 +335,7 @@ def _acc_modules(cur: str) -> dict:
             "actions": ["Save Changes", "AI 科目映射"],
             "sub_tabs": ["Chartfields Details", "COA Mapping", "COA Remapping"],
             "fields": [
-                F("Company Code", "ro", "COM01", True),
+                F("Company Code", "ro", code, True),
                 F("Effective Date", "date", "2026-01-01", True),
                 F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
                 F("Chartfield 1 (Entity)", "dd", "1000 - 总公司", True, opts=["1000 - 总公司", "2000 - 分公司"]),
@@ -369,7 +382,7 @@ def _acc_modules(cur: str) -> dict:
 # ═══════════════════════════════════════════════════════════
 #  🏦 Master Data 主数据域
 # ═══════════════════════════════════════════════════════════
-def _master_modules(cur: str) -> dict:
+def _master_modules(cur: str, code: str = "PDS-MY", country: str = "MY") -> dict:
     return {
         # Bank —— Tabset(Bank Table/Branch/BIC)
         "bank": {
@@ -381,7 +394,7 @@ def _master_modules(cur: str) -> dict:
             "fields": [
                 F("Bank Code", "t", "MBB", True),
                 F("Bank Name", "t", "Maybank Berhad", True),
-                F("Country", "dd", "Malaysia", True, opts=["Malaysia", "Singapore", "Thailand"]),
+                F("Country", "dd", _country_name(country), True, opts=_COUNTRY_OPTS),
                 F("BIC / SWIFT", "t", "MBBEMYKL", True),
                 F("Effective Date", "date", "2026-01-01", True),
                 F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
@@ -513,15 +526,17 @@ _FILTER_EN = {
 }
 
 
-def get_paydaes_module(module_id: str, cur: str = "MYR", lang: str = "zh", country: str = "MY") -> dict | None:
+def get_paydaes_module(module_id: str, cur: str = "MYR", lang: str = "zh",
+                       country: str = "MY", code: str = "PDS-MY") -> dict | None:
     """返回 Paydaes 6 大域模块视图;不存在返回 None(交回原 18 模块逻辑)。
-    country = 公司所属国家代码(SG/MY/TH/VN/ID/HK/CN),税务合规模块据此联动真实税制。"""
+    country = 公司所属国家代码(SG/MY/TH/VN/ID/HK/CN),税务合规模块据此联动真实税制。
+    code    = 当前所选公司的公司代码(如 PDS-SG / HZN-CN),供各模块的 Company Code 字段联动。"""
     registry = {}
     registry.update(_tax_modules(cur, country))
-    registry.update(_leave_modules(cur))
-    registry.update(_ta_modules(cur))
-    registry.update(_acc_modules(cur))
-    registry.update(_master_modules(cur))
+    registry.update(_leave_modules(cur, country))
+    registry.update(_ta_modules(cur, code, country))
+    registry.update(_acc_modules(cur, code, country))
+    registry.update(_master_modules(cur, code, country))
     mod = registry.get(module_id)
     if mod is None:
         return None

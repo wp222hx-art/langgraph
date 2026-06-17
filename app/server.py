@@ -219,13 +219,14 @@ def compliance(country: str | None = None):
 def module_data(module_id: str, company: str = "sg", lang: str = "zh"):
     """返回某个模块的工作区数据(表格/卡片)"""
     # 先查 Paydaes 6 大域(税务/假期/考勤/财务/主数据/法定表单)
-    cur = "MYR"; country = "MY"
+    cur = "MYR"; country = "MY"; code = "PDS-MY"
     for g in enterprise.GROUPS:
         for c in g["companies"]:
             if c["id"] == company:
                 cur = c.get("currency", "MYR")
                 country = c.get("country", "MY")
-    pm = paydaes_modules.get_paydaes_module(module_id, cur, lang, country)
+                code = c.get("code", "PDS-MY")
+    pm = paydaes_modules.get_paydaes_module(module_id, cur, lang, country, code)
     if pm is not None:
         return pm
     # 回退原 18 模块逻辑
@@ -314,6 +315,12 @@ def delete_module_record(rid: int, company: str = "sg", role: str = "hr_admin"):
 def formula_eval(req: FormulaEvalReq):
     """公式真实计算 —— 解析并求值, 返回结果或错误(可解释)。"""
     return formula_engine.evaluate(req.formula, req.variables)
+
+
+@app.get("/api/formula/help")
+def formula_help(q: str = ""):
+    """公式查询体系 —— 函数手册 / 变量字典 / 场景模板 + 关键词检索。"""
+    return formula_engine.formula_help(q)
 
 
 @app.post("/api/module_form")

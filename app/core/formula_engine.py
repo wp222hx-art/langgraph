@@ -372,3 +372,118 @@ SAMPLE_CONTEXTS = {
 
 def sample_context(module_id: str = "default") -> dict:
     return dict(SAMPLE_CONTEXTS.get(module_id, SAMPLE_CONTEXTS["default"]))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  6. 公式查询体系 (Formula Helper) —— 函数手册 / 变量字典 / 场景模板 / 搜索
+#     供前端「自然语言生成公式」按钮调用, 做成可查询的帮助系统。
+# ═══════════════════════════════════════════════════════════════════════
+
+# ── 函数手册 ──
+FUNCTION_DOCS = [
+    {"name": "IF", "sig": "IF(条件, 真值, 假值)", "sig_en": "IF(cond, then, else)",
+     "desc": "条件判断:条件成立返回真值,否则返回假值",
+     "desc_en": "Returns one value if condition is true, another if false",
+     "example": "IF(SERVICE.YEARS >= 5, 16, 14)", "cat": "逻辑"},
+    {"name": "AND", "sig": "A AND B", "sig_en": "A AND B",
+     "desc": "逻辑与:两个条件同时成立才为真",
+     "desc_en": "Logical AND: true only when both are true",
+     "example": "HR.GENDER='F' AND HR.MARITAL='married'", "cat": "逻辑"},
+    {"name": "OR", "sig": "A OR B", "sig_en": "A OR B",
+     "desc": "逻辑或:任一条件成立即为真",
+     "desc_en": "Logical OR: true when either is true",
+     "example": "HR.GRADE='P6' OR HR.GRADE='P7'", "cat": "逻辑"},
+    {"name": "NOT", "sig": "NOT(条件)", "sig_en": "NOT(cond)",
+     "desc": "逻辑非:取反", "desc_en": "Logical NOT: negation",
+     "example": "NOT(IS.HOLIDAY)", "cat": "逻辑"},
+    {"name": "ROUND", "sig": "ROUND(数值, 小数位)", "sig_en": "ROUND(value, digits)",
+     "desc": "四舍五入到指定小数位", "desc_en": "Round to N decimal places",
+     "example": "ROUND(ENTITLEMENT.DAYS * 0.75, 1)", "cat": "数学"},
+    {"name": "MIN", "sig": "MIN(a, b, ...)", "sig_en": "MIN(a, b, ...)",
+     "desc": "取最小值", "desc_en": "Smallest of the values",
+     "example": "MIN(CARRY.FORWARD, 5)", "cat": "数学"},
+    {"name": "MAX", "sig": "MAX(a, b, ...)", "sig_en": "MAX(a, b, ...)",
+     "desc": "取最大值", "desc_en": "Largest of the values",
+     "example": "MAX(ENTITLEMENT.DAYS, 12)", "cat": "数学"},
+    {"name": "ABS", "sig": "ABS(数值)", "sig_en": "ABS(value)",
+     "desc": "取绝对值", "desc_en": "Absolute value",
+     "example": "ABS(BALANCE.ADJUST)", "cat": "数学"},
+    {"name": "CEIL", "sig": "CEIL(数值)", "sig_en": "CEIL(value)",
+     "desc": "向上取整", "desc_en": "Round up to integer",
+     "example": "CEIL(SERVICE.YEARS / 2)", "cat": "数学"},
+    {"name": "FLOOR", "sig": "FLOOR(数值)", "sig_en": "FLOOR(value)",
+     "desc": "向下取整", "desc_en": "Round down to integer",
+     "example": "FLOOR(OT.HOURS)", "cat": "数学"},
+]
+
+# ── 变量字典 (按域分组) ──
+VARIABLE_DOCS = [
+    {"name": "HR.GENDER", "desc": "员工性别 (M/F)", "desc_en": "Employee gender (M/F)", "domain": "人事"},
+    {"name": "HR.MARITAL", "desc": "婚姻状况 (single/married)", "desc_en": "Marital status", "domain": "人事"},
+    {"name": "HR.GRADE", "desc": "职级 (如 P6/P7)", "desc_en": "Job grade", "domain": "人事"},
+    {"name": "AGE", "desc": "员工年龄", "desc_en": "Employee age", "domain": "人事"},
+    {"name": "SERVICE.YEARS", "desc": "司龄(年)", "desc_en": "Years of service", "domain": "假期"},
+    {"name": "ENTITLEMENT.DAYS", "desc": "基础应享天数", "desc_en": "Base entitlement days", "domain": "假期"},
+    {"name": "CARRY.FORWARD", "desc": "结转天数", "desc_en": "Carry-forward days", "domain": "假期"},
+    {"name": "OT.HOURS", "desc": "加班小时数", "desc_en": "Overtime hours", "domain": "考勤"},
+    {"name": "RATE.NORMAL", "desc": "平日加班倍率", "desc_en": "Normal OT multiplier", "domain": "考勤"},
+    {"name": "RATE.HOLIDAY", "desc": "假日加班倍率", "desc_en": "Holiday OT multiplier", "domain": "考勤"},
+    {"name": "IS.HOLIDAY", "desc": "是否假日 (0/1)", "desc_en": "Is public holiday (0/1)", "domain": "考勤"},
+    {"name": "BASE.HOURLY", "desc": "时薪基数", "desc_en": "Base hourly rate", "domain": "薪资"},
+]
+
+# ── 场景化公式模板 (可点击直接插入) ──
+TEMPLATE_DOCS = [
+    {"id": "tpl_service_tier", "domain": "假期",
+     "title": "按司龄阶梯增加年假",
+     "title_en": "Annual leave by service tier",
+     "keywords": ["司龄", "年假", "工龄", "阶梯", "service", "tenure", "annual"],
+     "formula": "IF(SERVICE.YEARS >= 10, ENTITLEMENT.DAYS + 4,\n   IF(SERVICE.YEARS >= 5, ENTITLEMENT.DAYS + 2,\n      ENTITLEMENT.DAYS))"},
+    {"id": "tpl_gender_marital", "domain": "假期",
+     "title": "已婚女性额外假期",
+     "title_en": "Extra leave for married female",
+     "keywords": ["性别", "已婚", "女性", "婚假", "gender", "married", "female"],
+     "formula": "IF(HR.GENDER='F' AND HR.MARITAL='married',\n   ENTITLEMENT.DAYS + 3,\n   ENTITLEMENT.DAYS)"},
+    {"id": "tpl_prorata", "domain": "假期",
+     "title": "按入职月份比例折算 (Pro Rata)",
+     "title_en": "Pro-rata by joining month",
+     "keywords": ["比例", "折算", "入职", "prorata", "pro rata", "proration"],
+     "formula": "ROUND(ENTITLEMENT.DAYS * (12 - JOIN.MONTH + 1) / 12, 1)"},
+    {"id": "tpl_carry_cap", "domain": "假期",
+     "title": "结转封顶 (最多结转 5 天)",
+     "title_en": "Carry-forward cap (max 5 days)",
+     "keywords": ["结转", "封顶", "上限", "carry", "forward", "cap"],
+     "formula": "MIN(CARRY.FORWARD, 5)"},
+    {"id": "tpl_ot_pay", "domain": "考勤",
+     "title": "加班费 (区分平日/假日倍率)",
+     "title_en": "Overtime pay (normal vs holiday rate)",
+     "keywords": ["加班", "加班费", "倍率", "假日", "overtime", "ot", "holiday"],
+     "formula": "IF(IS.HOLIDAY = 1,\n   OT.HOURS * BASE.HOURLY * RATE.HOLIDAY,\n   OT.HOURS * BASE.HOURLY * RATE.NORMAL)"},
+    {"id": "tpl_grade_bonus", "domain": "薪资",
+     "title": "按职级浮动津贴",
+     "title_en": "Allowance by job grade",
+     "keywords": ["职级", "津贴", "浮动", "grade", "allowance"],
+     "formula": "IF(HR.GRADE='P7', 2000,\n   IF(HR.GRADE='P6', 1200, 800))"},
+]
+
+
+def formula_help(query: str = "") -> dict:
+    """公式查询体系入口:返回函数手册/变量字典/场景模板。
+    传入 query 时, 对模板做关键词检索(中英文/标题/关键词命中)。"""
+    q = (query or "").strip().lower()
+    if q:
+        hits = []
+        for tpl in TEMPLATE_DOCS:
+            hay = " ".join([tpl["title"], tpl.get("title_en", ""),
+                            tpl["domain"], " ".join(tpl["keywords"])]).lower()
+            if any(part and part in hay for part in q.split()) or q in hay:
+                hits.append(tpl)
+        # 函数命中
+        fn_hits = [f for f in FUNCTION_DOCS
+                   if q in f["name"].lower() or q in f["desc"].lower()
+                   or q in f.get("desc_en", "").lower()]
+        return {"query": query, "templates": hits, "functions": fn_hits,
+                "matched": len(hits) + len(fn_hits)}
+    return {"query": "", "functions": FUNCTION_DOCS,
+            "variables": VARIABLE_DOCS, "templates": TEMPLATE_DOCS,
+            "matched": len(TEMPLATE_DOCS)}

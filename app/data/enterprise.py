@@ -12,19 +12,19 @@ GROUPS = [
         "id": "paydaes", "name": "Paydaes 集团", "name_en": "Paydaes Group",
         "logo": "P", "color": "#20c997", "plan": "Enterprise",
         "companies": [
-            {"id": "sg", "name": "新加坡公司", "name_en": "Singapore Pte Ltd", "country": "SG", "flag": "🇸🇬", "currency": "SGD", "employees": 320, "active": True},
-            {"id": "my", "name": "马来西亚公司", "name_en": "Malaysia Sdn Bhd", "country": "MY", "flag": "🇲🇾", "currency": "MYR", "employees": 256, "active": True},
-            {"id": "th", "name": "泰国公司", "name_en": "Thailand Co., Ltd", "country": "TH", "flag": "🇹🇭", "currency": "THB", "employees": 198, "active": True},
-            {"id": "vn", "name": "越南公司", "name_en": "Vietnam Co., Ltd", "country": "VN", "flag": "🇻🇳", "currency": "VND", "employees": 174, "active": True},
-            {"id": "id", "name": "印尼公司", "name_en": "Indonesia PT", "country": "ID", "flag": "🇮🇩", "currency": "IDR", "employees": 412, "active": True},
+            {"id": "sg", "code": "PDS-SG", "name": "新加坡公司", "name_en": "Singapore Pte Ltd", "country": "SG", "flag": "🇸🇬", "currency": "SGD", "employees": 320, "active": True},
+            {"id": "my", "code": "PDS-MY", "name": "马来西亚公司", "name_en": "Malaysia Sdn Bhd", "country": "MY", "flag": "🇲🇾", "currency": "MYR", "employees": 256, "active": True},
+            {"id": "th", "code": "PDS-TH", "name": "泰国公司", "name_en": "Thailand Co., Ltd", "country": "TH", "flag": "🇹🇭", "currency": "THB", "employees": 198, "active": True},
+            {"id": "vn", "code": "PDS-VN", "name": "越南公司", "name_en": "Vietnam Co., Ltd", "country": "VN", "flag": "🇻🇳", "currency": "VND", "employees": 174, "active": True},
+            {"id": "id", "code": "PDS-ID", "name": "印尼公司", "name_en": "Indonesia PT", "country": "ID", "flag": "🇮🇩", "currency": "IDR", "employees": 412, "active": True},
         ],
     },
     {
         "id": "horizon", "name": "Horizon 控股", "name_en": "Horizon Holdings",
         "logo": "H", "color": "#0891b2", "plan": "Enterprise",
         "companies": [
-            {"id": "hk", "name": "香港公司", "name_en": "Hong Kong Ltd", "country": "HK", "flag": "🇭🇰", "currency": "HKD", "employees": 88, "active": True},
-            {"id": "cn", "name": "中国公司", "name_en": "China Co., Ltd", "country": "CN", "flag": "🇨🇳", "currency": "CNY", "employees": 560, "active": True},
+            {"id": "hk", "code": "HZN-HK", "name": "香港公司", "name_en": "Hong Kong Ltd", "country": "HK", "flag": "🇭🇰", "currency": "HKD", "employees": 88, "active": True},
+            {"id": "cn", "code": "HZN-CN", "name": "中国公司", "name_en": "China Co., Ltd", "country": "CN", "flag": "🇨🇳", "currency": "CNY", "employees": 560, "active": True},
         ],
     },
 ]
