@@ -316,7 +316,7 @@ async function renderDashboard() {
 
 // ════════ 18 模块工作区 ════════
 async function renderModule(navId) {
-  const m = await fetch(`/api/module/${navId}?company=${S.company.id}&lang=${S.lang}`).then(r => r.json());
+  const m = await fetch(`/api/module/${navId}?company=${effCompany()}&lang=${S.lang}`).then(r => r.json());
   S.curModule = m;                       // 暂存当前模块(供 CRUD 模态框读取字段定义)
   window.__crud = m.crud || null;
   const crudAction = m.crud ? m.crud.action : null;
@@ -875,7 +875,7 @@ async function addFamily() {
     acFlash(fb, '✅ ' + t('fam.added') + ' ' + (r.name || name), false);
     document.getElementById('fam-name').value = '';
     // 重新拉模块刷新列表
-    const m = await fetch(`/api/module/family?company=${S.company.id}&lang=${S.lang}`).then(x => x.json());
+    const m = await fetch(`/api/module/family?company=${effCompany()}&lang=${S.lang}`).then(x => x.json());
     const box = document.getElementById('family-list');
     if (box) box.innerHTML = familyRows(m.members);
   } catch (e) { acFlash(fb, t('claim.load_err'), true); }
@@ -1072,7 +1072,7 @@ async function loadClaimTypes() {
   const sel = document.getElementById('cf-type');
   if (!sel) return;
   try {
-    const types = await fetch(`/api/claim_types?company=${S.company.id}`).then(r => r.json()).then(x => x.types || []);
+    const types = await fetch(`/api/claim_types?company=${effCompany()}`).then(r => r.json()).then(x => x.types || []);
     if (types.length) {
       sel.innerHTML = `<option value="">${t('claim.f_type')}</option>` +
         types.map(ct => `<option value="${ct.code}">${(S.lang === 'en' && ct.name_en ? ct.name_en : ct.name)} (≤${ct.limit_amt})</option>`).join('');
@@ -1084,7 +1084,7 @@ async function refreshClaims(scope) {
   const box = document.getElementById('claims-box');
   if (!box) return;
   try {
-    const d = await fetch(`/api/claims?company=${S.company.id}`).then(r => r.json());
+    const d = await fetch(`/api/claims?company=${effCompany()}`).then(r => r.json());
     const claims = d.claims || [];
     if (!claims.length) { box.innerHTML = `<div class="text-sm text-slate-400 py-6 text-center">${t('claim.empty')}</div>`; return; }
     const rows = claims.map(cl => `<tr>
@@ -1114,7 +1114,7 @@ async function submitClaim() {
   if (!typeCode) { acFlash(fb, t('claim.need_type'), true); return; }
   if (!amount || amount <= 0) { acFlash(fb, t('claim.need_amount'), true); return; }
   const payload = {
-    company: S.company.id, type_code: typeCode, amount: amount,
+    company: effCompany(), type_code: typeCode, amount: amount,
     merchant: (document.getElementById('cf-merchant') || {}).value || '',
     currency: (document.getElementById('cf-currency') || {}).value || '',
     note: (document.getElementById('cf-note') || {}).value || '',
@@ -1156,7 +1156,7 @@ async function ocrUpload(ev) {
   reader.onload = async () => {
     const b64 = String(reader.result);
     try {
-      const r = await api('/api/ocr', { company: S.company.id, image_b64: b64, mime: file.type || 'image/jpeg' });
+      const r = await api('/api/ocr', { company: effCompany(), image_b64: b64, mime: file.type || 'image/jpeg' });
       const ext = r.extracted || {};
       if (ext.type_code) { const s = document.getElementById('cf-type'); if (s) s.value = ext.type_code; }
       if (ext.merchant) { const e = document.getElementById('cf-merchant'); if (e) e.value = ext.merchant; }
@@ -1272,6 +1272,10 @@ window.switchRole = switchRole;
 // 普通员工(employee)= 移动端 App 体验;其余为桌面管理工作台
 const MOBILE_ROLES = ['employee'];
 function isMobileMode() { return S.role && MOBILE_ROLES.includes(S.role.id); }
+// 有效公司ID:员工(手机端)演示员工隶属马来西亚公司,所有数据源强制锁 my,
+// 保证额度/报销记录/类型/薪资/AI 对话全链路同一套真实数据(RM)。
+function effCompany() { return isMobileMode() ? 'my' : (S.company ? S.company.id : 'group'); }
+window.effCompany = effCompany;
 function applyMode() {
   const on = isMobileMode();
   document.body.classList.toggle('mode-mobile', on);
@@ -1600,7 +1604,7 @@ function sendAI() {
   aiScroll();
 
   let bubble = null, badge = '';
-  const es = new EventSource(`/api/chat/stream?message=${encodeURIComponent(text)}&thread_id=${S.threadId}&company=${S.company.id}&role=${S.role.id}`);
+  const es = new EventSource(`/api/chat/stream?message=${encodeURIComponent(text)}&thread_id=${S.threadId}&company=${effCompany()}&role=${S.role.id}`);
   es.addEventListener('route', e => {
     const d = JSON.parse(e.data);
     const t = S.agents.find(a => a.id === d.agent); if (t) selectAgentSilent(t);

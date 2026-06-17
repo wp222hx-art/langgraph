@@ -436,10 +436,18 @@ body.mode-mobile #workspace{
   overflow:hidden;
 }
 body.mode-mobile #view{
-  padding:14px !important; max-width:none !important;
+  padding:14px !important; width:100% !important; max-width:100% !important;
   padding-bottom:84px !important;   /* 给底部 Tab 让位 */
-  height:100%; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  height:100%; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch;
+  box-sizing:border-box;
 }
+/* 防溢出:手机壳内所有元素纳入边框盒模型,禁止横向撑破 430px 壳子 */
+body.mode-mobile #view *{ box-sizing:border-box; max-width:100%; }
+/* 表单里 Tailwind 的固定宽 w-24/w-36(币种/日期)在窄屏会撑破 → 改为弹性 */
+body.mode-mobile #view .w-24,
+body.mode-mobile #view .w-36{ width:auto !important; min-width:88px; flex:0 0 auto; }
+/* 记录区表格允许超出(它自身 overflow-x:auto 横滑),不受 max-width:100% 影响 */
+body.mode-mobile #claims-box table{ max-width:none; }
 /* 移动端卡片更紧凑、可点区域更大 */
 body.mode-mobile .kpi-card{ padding:15px; border-radius:14px; }
 body.mode-mobile .panel{ border-radius:14px; }
@@ -703,3 +711,13 @@ body.mode-mobile .panel .text-3xl { font-size:30px; }
 /* 报销记录表横向可滑 */
 body.mode-mobile #claims-box { overflow-x:auto; -webkit-overflow-scrolling:touch; }
 body.mode-mobile #claims-box table { min-width:480px; }
+
+/* ★ 关键修复:手机壳内强制单列(无视 Tailwind lg 断点) ★
+   原因:手机壳是 430px 容器嵌在大屏中,而 Tailwind 的 lg:grid-cols-3
+   看的是整个浏览器窗口宽度,平板/横屏(>1024px)下会误触发 3 列把卡片挤变形。
+   这里用 body.mode-mobile 提权,强制所有模块内网格在手机端为单列。 */
+body.mode-mobile #view .grid { grid-template-columns:1fr !important; gap:14px !important; }
+body.mode-mobile #view [class*="col-span"] { grid-column:auto !important; }
+/* ★ 关键:解除 grid/flex 子项默认 min-width:auto,否则内部内容会把 panel 撑破列宽 ★ */
+body.mode-mobile #view .grid > * { min-width:0 !important; width:100% !important; }
+body.mode-mobile #view .flex > * { min-width:0; }
