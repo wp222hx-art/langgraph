@@ -17,16 +17,84 @@ from app.data import payroll_data as P
 EXPORT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "exports")
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
+# 全量法定表格定义池(各国从中按需引用;实际生成逻辑目前以 MY 为完整实现,
+# 其余国家的国别专属表先登记清单,生成时回退到通用版式 + 国别抬头)
 STATUTORY_FORMS = {
+    # ── 通用 ──
     "payslip": ("工资单 Payslip", "Payslip"),
+    "payroll_gl": ("薪资凭证分类账 · 借贷平衡", "Payroll GL Journal"),
+    # ── 马来西亚 MY ──
     "epf_borang_a": ("EPF Borang A · 公积金缴款表", "EPF Borang A (KWSP 6)"),
     "ea_form": ("EA Form · 年度个税表", "Form EA (C.P.8A)"),
     "cp39": ("CP39 · PCB 月度汇缴表", "Form CP39 (LHDN MTD)"),
     "socso_8a": ("SOCSO Form 8A · 社保月报表", "SOCSO Form 8A (PERKESO)"),
     "bank_ibg": ("银行文件 IBG · 批量出粮", "Bank File IBG/GIRO (.txt)"),
-    "payroll_gl": ("薪资凭证分类账 · 借贷平衡", "Payroll GL Journal"),
     "lhdn_audit": ("LHDN 审计文件", "LHDN Audit File (.txt)"),
+    "e_form": ("E 表 · 雇主年度申报", "Form E (Employer Annual Return)"),
+    "ec_form": ("EC 表 · 雇员薪酬清单", "Form C.P.8D (EC / CP8D)"),
+    # ── 新加坡 SG ──
+    "ir8a": ("IR8A · 雇员年度入息表", "Form IR8A (Annual Return)"),
+    "ir8a_appendix": ("Appendix 8A/8B · 附加福利表", "Appendix 8A/8B"),
+    "ir21": ("IR21 · 离境清税表", "Form IR21 (Tax Clearance)"),
+    "cpf_submission": ("CPF 缴款表", "CPF Contribution (CPF EZPay)"),
+    "ais_file": ("AIS 自动入息申报文件", "Auto-Inclusion Scheme (AIS)"),
+    # ── 泰国 TH ──
+    "pnd1": ("PND.1 · 月度个税预扣表", "Form PND.1 (Monthly WHT)"),
+    "pnd1_kor": ("PND.1 Kor · 年度个税汇总", "Form PND.1 Kor (Annual)"),
+    "sso_kor_tor20": ("社保 SSO Kor.Tor.20", "SSO Kor.Tor.20"),
+    "fiftytawi": ("50 Tawi · 扣缴凭证", "50 Tawi (WHT Certificate)"),
+    # ── 越南 VN ──
+    "pit_monthly": ("个税月报 (Mẫu 05/KK-TNCN)", "PIT Monthly (05/KK-TNCN)"),
+    "pit_annual": ("个税年度结算 (Mẫu 05/QTT-TNCN)", "PIT Annual (05/QTT-TNCN)"),
+    "si_d02": ("社保申报 D02-TS", "Social Insurance D02-TS"),
+    # ── 印尼 ID ──
+    "spt1721": ("SPT 1721 · 个税年度申报", "SPT Masa 1721 (PPh 21)"),
+    "form_1721a1": ("1721-A1 · 雇员扣税凭证", "Form 1721-A1"),
+    "bpjs": ("BPJS · 社保健康缴款表", "BPJS (Ketenagakerjaan/Kesehatan)"),
+    # ── 香港 HK ──
+    "ir56b": ("IR56B · 雇员薪酬通知书", "Form IR56B (Employer's Return)"),
+    "ir56e": ("IR56E · 新雇员通知", "Form IR56E (New Employee)"),
+    "ir56f": ("IR56F · 雇员离职通知", "Form IR56F (Cessation)"),
+    "ir56g": ("IR56G · 离港雇员通知", "Form IR56G (Departure)"),
+    "mpf_remittance": ("强积金 MPF 供款结算书", "MPF Remittance Statement"),
+    # ── 中国 CN ──
+    "iit_withholding": ("个税扣缴申报表", "IIT Withholding Return"),
+    "iit_annual": ("个税年度汇算清缴", "IIT Annual Reconciliation"),
+    "social_insurance": ("社保公积金缴纳明细", "Social Insurance & Housing Fund"),
 }
+
+# ── 各国法定报表清单(按 country code 大写)──
+# 切换国家公司时,法定报表区只展示该国真实存在的表单
+STATUTORY_FORMS_BY_COUNTRY = {
+    "MY": ["payslip", "ea_form", "e_form", "ec_form", "epf_borang_a", "cp39",
+           "socso_8a", "bank_ibg", "payroll_gl", "lhdn_audit"],
+    "SG": ["payslip", "ir8a", "ir8a_appendix", "ir21", "cpf_submission",
+           "ais_file", "payroll_gl"],
+    "TH": ["payslip", "pnd1", "pnd1_kor", "sso_kor_tor20", "fiftytawi", "payroll_gl"],
+    "VN": ["payslip", "pit_monthly", "pit_annual", "si_d02", "payroll_gl"],
+    "ID": ["payslip", "spt1721", "form_1721a1", "bpjs", "payroll_gl"],
+    "HK": ["payslip", "ir56b", "ir56e", "ir56f", "ir56g", "mpf_remittance", "payroll_gl"],
+    "CN": ["payslip", "iit_withholding", "iit_annual", "social_insurance", "payroll_gl"],
+}
+
+# company.id(小写)→ country(大写)
+def _country_of(company: str) -> str:
+    try:
+        from app.data import enterprise as _e
+        for g in _e.GROUPS:
+            for c in g["companies"]:
+                if c.get("id") == (company or "").lower():
+                    return c.get("country", "MY")
+    except Exception:
+        pass
+    return (company or "MY").upper()
+
+def forms_for_company(company: str = "my") -> list:
+    """返回某公司所属国家的法定报表清单(切换公司即变)。"""
+    country = _country_of(company)
+    ids = STATUTORY_FORMS_BY_COUNTRY.get(country, STATUTORY_FORMS_BY_COUNTRY["MY"])
+    return [{"id": fid, "name_zh": STATUTORY_FORMS[fid][0],
+             "name_en": STATUTORY_FORMS[fid][1]} for fid in ids if fid in STATUTORY_FORMS]
 
 # ── 薪资科目表(COA, FRS 第8节映射规则)──
 COA = {
@@ -63,6 +131,10 @@ def export_statutory(form_id: str, company: str = "my", period: str = "", emp_no
     fname = f"{form_id}_{company}_{ts}.{ext}"
     path = os.path.join(EXPORT_DIR, fname)
 
+    # 已有完整实现的表单(目前为通用 + 马来西亚)
+    _IMPLEMENTED = {"payslip", "epf_borang_a", "ea_form", "cp39",
+                    "socso_8a", "bank_ibg", "payroll_gl", "lhdn_audit"}
+
     extra = None
     if form_id == "payslip":
         _build_payslip(path, period or "2026-05", emp_no)
@@ -80,6 +152,9 @@ def export_statutory(form_id: str, company: str = "my", period: str = "", emp_no
         extra = _build_payroll_gl(path, period or "2026-05")
     elif form_id == "lhdn_audit":
         _build_lhdn_audit(path, period or "2026-05")
+    else:
+        # 其余国别专属表单:通用版式 + 正确的国别抬头(诚实标注未完成精算)
+        _build_generic_country_form(path, form_id, company, period or "2026-05")
 
     out_extra = extra or {}
     return {"ok": True, "form_id": form_id, "filename": fname, **out_extra,
@@ -543,3 +618,62 @@ def _build_lhdn_audit(path: str, period: str):
     lines.append("本文件依 LHDN 审计要求生成(纯文本存档)。正式以 LHDN HASiL 官方格式为准。")
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
+
+
+# ════════════════ 通用国别法定表单(SG/TH/VN/ID/HK/CN 等) ════════════════
+# 国别税务抬头信息(币种 / 税务局 / 社保机构)
+_COUNTRY_META = {
+    "SG": ("SGD", "IRAS · Inland Revenue Authority of Singapore", "CPF Board"),
+    "TH": ("THB", "RD · Revenue Department", "SSO 社会保障办公室"),
+    "VN": ("VND", "GDT · General Department of Taxation", "VSS 越南社会保险"),
+    "ID": ("IDR", "DJP · Direktorat Jenderal Pajak", "BPJS"),
+    "HK": ("HKD", "IRD · Inland Revenue Department", "MPFA 强积金管理局"),
+    "CN": ("CNY", "国家税务总局 STA", "社保 / 公积金中心"),
+    "MY": ("MYR", "LHDN · Lembaga Hasil Dalam Negeri", "KWSP / PERKESO"),
+}
+
+def _build_generic_country_form(path: str, form_id: str, company: str, period: str):
+    """国别专属法定表单的通用生成器:正确国别抬头 + 员工薪资明细 + 合规声明。
+    用于尚未做国别精算实现的表单,确保切换国家后导出不报错且抬头正确。"""
+    from openpyxl import Workbook
+    cy = _country_of(company)
+    cur, tax_auth, social = _COUNTRY_META.get(cy, _COUNTRY_META["MY"])
+    title_zh, title_en = STATUTORY_FORMS.get(form_id, (form_id, form_id))
+    s = _styles()
+
+    wb = Workbook(); ws = wb.active; ws.title = form_id[:28]
+    ws.merge_cells("A1:F1"); ws["A1"] = f"{title_en} / {title_zh}"
+    ws["A1"].font = s["title"]
+    ws.merge_cells("A2:F2"); ws["A2"] = f"国家/Country: {cy}    主管机关/Authority: {tax_auth}"
+    ws["A2"].font = s["sub"]
+    ws.merge_cells("A3:F3"); ws["A3"] = f"所属期/Period: {period}    币种/Currency: {cur}    社保机构: {social}"
+    ws["A3"].font = s["sub"]
+
+    # 员工薪资明细(取真实薪资数据源)
+    try:
+        emps = P.PAYROLL_EMPLOYEES
+    except Exception:
+        emps = []
+    hdr = ["No", "员工/Employee", "税号/TaxID", f"应税薪酬/Gross ({cur})", f"个税/Tax ({cur})", f"净额/Net ({cur})"]
+    for j, h in enumerate(hdr, 1):
+        c = ws.cell(5, j, h); c.font = s["hfont"]; c.fill = s["hfill"]
+    r = 6; tg = tt = tn = 0.0
+    for i, e in enumerate(emps, 1):
+        try:
+            m = P.compute_monthly(e)
+        except Exception:
+            m = e
+        g = float(m.get("gross_taxable", 0) or 0)
+        tax = float(m.get("pcb", 0) or 0)
+        net = float(m.get("net_pay", g - tax) or (g - tax))
+        ws.cell(r, 1, i); ws.cell(r, 2, e.get("name", "")); ws.cell(r, 3, e.get("tax_no", ""))
+        ws.cell(r, 4, round(g, 2)); ws.cell(r, 5, round(tax, 2)); ws.cell(r, 6, round(net, 2))
+        tg += g; tt += tax; tn += net; r += 1
+    ws.cell(r, 2, "合计 TOTAL").font = s["hfont"]
+    ws.cell(r, 4, round(tg, 2)); ws.cell(r, 5, round(tt, 2)); ws.cell(r, 6, round(tn, 2))
+
+    note_r = r + 2
+    ws.merge_cells(f"A{note_r}:F{note_r}")
+    ws.cell(note_r, 1, f"⚠️ 本表为 {cy} 国别法定表单({title_en})的合规框架版,抬头与申报机关已按所属国适配；"
+                       f"国别专属税率精算与官方版式正在按路线图逐国落地,正式申报请以 {tax_auth} 官方系统为准。").font = s["sub"]
+    wb.save(path)

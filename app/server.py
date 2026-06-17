@@ -704,13 +704,15 @@ def me_summary(role: str = "employee", company: str = "my", emp_no: str | None =
 
 
 @app.get("/api/statutory/forms")
-def statutory_forms():
-    """法定表格清单(供前端渲染)。"""
+def statutory_forms(company: str = "my"):
+    """法定表格清单(按公司所属国家返回 —— 切换国家公司即变)。"""
     from app.core import statutory
     from app.data import payroll_data
+    country = statutory._country_of(company)
     return {
-        "forms": [{"id": k, "name_zh": v[0], "name_en": v[1]}
-                  for k, v in statutory.STATUTORY_FORMS.items()],
+        "company": company,
+        "country": country,
+        "forms": statutory.forms_for_company(company),
         "employer": payroll_data.EMPLOYER,
         "employee_count": len(payroll_data.PAYROLL_EMPLOYEES),
     }

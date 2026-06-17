@@ -473,34 +473,65 @@ function reportView(m) {
 }
 
 // 🇲🇾 马来西亚法定合规表格卡片
+// 表单图标映射(按 form_id;未列出的用默认图标)
+const STAT_FORM_ICON = {
+  payslip: ['fa-file-invoice-dollar', 'emerald'],
+  epf_borang_a: ['fa-piggy-bank', 'blue'], ea_form: ['fa-file-contract', 'orange'],
+  e_form: ['fa-file-lines', 'teal'], ec_form: ['fa-file-circle-check', 'green'],
+  cp39: ['fa-receipt', 'rose'], socso_8a: ['fa-shield-heart', 'cyan'],
+  bank_ibg: ['fa-building-columns', 'indigo'], payroll_gl: ['fa-scale-balanced', 'amber'],
+  lhdn_audit: ['fa-file-shield', 'slate'],
+  ir8a: ['fa-file-contract', 'orange'], ir8a_appendix: ['fa-paperclip', 'blue'],
+  ir21: ['fa-plane-departure', 'rose'], cpf_submission: ['fa-piggy-bank', 'blue'],
+  ais_file: ['fa-file-export', 'teal'],
+  pnd1: ['fa-receipt', 'rose'], pnd1_kor: ['fa-file-contract', 'orange'],
+  sso_kor_tor20: ['fa-shield-heart', 'cyan'], fiftytawi: ['fa-file-circle-check', 'green'],
+  pit_monthly: ['fa-receipt', 'rose'], pit_annual: ['fa-file-contract', 'orange'], si_d02: ['fa-shield-heart', 'cyan'],
+  spt1721: ['fa-file-contract', 'orange'], form_1721a1: ['fa-file-circle-check', 'green'], bpjs: ['fa-shield-heart', 'cyan'],
+  ir56b: ['fa-file-contract', 'orange'], ir56e: ['fa-user-plus', 'green'], ir56f: ['fa-user-minus', 'rose'],
+  ir56g: ['fa-plane-departure', 'indigo'], mpf_remittance: ['fa-piggy-bank', 'blue'],
+  iit_withholding: ['fa-receipt', 'rose'], iit_annual: ['fa-file-contract', 'orange'], social_insurance: ['fa-shield-heart', 'cyan'],
+};
+
 function statutoryCard() {
-  const forms = [
-    { id: 'payslip', icon: 'fa-file-invoice-dollar', color: 'emerald' },
-    { id: 'epf_borang_a', icon: 'fa-piggy-bank', color: 'blue' },
-    { id: 'ea_form', icon: 'fa-file-contract', color: 'orange' },
-    { id: 'cp39', icon: 'fa-receipt', color: 'rose' },
-    { id: 'socso_8a', icon: 'fa-shield-heart', color: 'cyan' },
-    { id: 'bank_ibg', icon: 'fa-building-columns', color: 'indigo' },
-    { id: 'payroll_gl', icon: 'fa-scale-balanced', color: 'amber' },
-    { id: 'lhdn_audit', icon: 'fa-file-shield', color: 'slate' },
-  ];
-  const cards = forms.map(f => `
-    <button class="stat-form-btn" onclick="exportStatutory('${f.id}')" id="stat-btn-${f.id}">
-      <i class="fas ${f.icon} text-${f.color}-500 text-xl"></i>
-      <div class="stat-form-name">${t('report.' + f.id)}</div>
-      <div class="stat-form-desc">${t('report.' + f.id + '_d')}</div>
-      <i class="fas fa-download stat-form-dl"></i>
-      ${f.id === 'ea_form' ? `<span class="ea-pdf-badge" onclick="event.stopPropagation(); exportStatutory('ea_form','pdf')" title="${t('report.ea_pdf')}"><i class="fas fa-file-pdf"></i> ${t('report.ea_pdf')}</span>` : ''}
-    </button>`).join('');
+  // 容器先占位,实际表单按当前公司所属国家异步加载
+  setTimeout(() => loadStatutoryForms(), 0);
   return `<div class="panel p-5 lg:col-span-3 mt-1">
     <div class="font-semibold text-slate-800 mb-1 flex items-center gap-2">
-      <span data-i18n="report.statutory_title">${t('report.statutory_title')}</span></div>
+      <span data-i18n="report.statutory_title">${t('report.statutory_title')}</span>
+      <span id="stat-country-tag" class="text-[11px] font-normal px-2 py-0.5 rounded-full bg-teal-50 text-teal-600"></span></div>
     <p class="text-xs text-slate-500 mb-3" data-i18n="report.statutory_desc">${t('report.statutory_desc')}</p>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">${cards}</div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3" id="stat-forms-grid">
+      <div class="text-sm text-slate-400 col-span-3"><i class="fas fa-spinner fa-spin"></i> ...</div>
+    </div>
     <p class="text-[11px] text-slate-400 mt-3"><i class="fas fa-circle-info"></i> <span data-i18n="report.statutory_note">${t('report.statutory_note')}</span></p>
     <p class="text-[11px] mt-1" id="stat-export-fb"></p>
     ${importCard()}</div>`;
 }
+
+// 按当前公司所属国家加载法定报表清单(切换公司时调用)
+async function loadStatutoryForms() {
+  const grid = $('#stat-forms-grid');
+  if (!grid) return;
+  const data = await api(`/api/statutory/forms?company=${effCompany()}`);
+  const tag = $('#stat-country-tag');
+  if (tag && data.country) tag.textContent = data.country;
+  const forms = data.forms || [];
+  grid.innerHTML = forms.map(f => {
+    const [icon, color] = STAT_FORM_ICON[f.id] || ['fa-file-lines', 'slate'];
+    const nm = S.lang === 'en' ? f.name_en : f.name_zh;
+    const desc = f.name_en;
+    return `
+    <button class="stat-form-btn" onclick="exportStatutory('${f.id}')" id="stat-btn-${f.id}">
+      <i class="fas ${icon} text-${color}-500 text-xl"></i>
+      <div class="stat-form-name">${nm}</div>
+      <div class="stat-form-desc">${desc}</div>
+      <i class="fas fa-download stat-form-dl"></i>
+      ${f.id === 'ea_form' ? `<span class="ea-pdf-badge" onclick="event.stopPropagation(); exportStatutory('ea_form','pdf')" title="${t('report.ea_pdf')}"><i class="fas fa-file-pdf"></i> ${t('report.ea_pdf')}</span>` : ''}
+    </button>`;
+  }).join('');
+}
+window.loadStatutoryForms = loadStatutoryForms;
 
 function importCard() {
   return `<div class="import-card mt-4">
