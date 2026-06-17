@@ -18,6 +18,14 @@ const I18N = {
       me_balance: '我的额度', me_claims: '我的报销', me_family: '家属信息', me_switch: '切换身份',
       mobile_hint: '移动端用户模式',
     },
+    me: {
+      net_this_month: '本月实发工资', gross: '应发', deduction: '扣除', view_payslip: '查看薪资单',
+      annual_quota: '年度报销额度', st_pending: '审批中', st_approved: '已批准', st_paid: '已发放', st_rejected: '已驳回',
+      todo_prefix: '你有', todo_suffix: '笔报销待处理', my_payslip: '我的薪资单', ask_ai_quota: '问 AI:我还能报多少',
+      back: '返回', payslip_title: '薪资单', net_pay: '实发工资', earnings: '收入项', deductions: '扣除项',
+      gross_total: '应发合计', total_deduction: '扣除合计',
+      payslip_note: '薪资数据仅本人可见 · 由 Paydaes 薪资引擎实时计算(EPF/SOCSO/EIS/PCB 已依马来西亚法定标准核算)',
+    },
     topbar: {
       global: '全球合规', notifications: '通知', ai_assistant: 'AI 助手',
       switch_company: '切换公司', switch_role: '切换角色', switch_lang: '切换语言',
@@ -170,6 +178,14 @@ const I18N = {
       tab_home: 'Home', tab_claim: 'Claims', tab_me: 'Me', tab_ai: 'AI',
       me_balance: 'My Quota', me_claims: 'My Claims', me_family: 'Family', me_switch: 'Switch Role',
       mobile_hint: 'Mobile User Mode',
+    },
+    me: {
+      net_this_month: 'Net Pay This Month', gross: 'Gross', deduction: 'Deductions', view_payslip: 'View Payslip',
+      annual_quota: 'Annual Claim Quota', st_pending: 'Pending', st_approved: 'Approved', st_paid: 'Paid', st_rejected: 'Rejected',
+      todo_prefix: 'You have', todo_suffix: 'claim(s) to handle', my_payslip: 'My Payslip', ask_ai_quota: 'Ask AI: how much left',
+      back: 'Back', payslip_title: 'Payslip', net_pay: 'Net Pay', earnings: 'Earnings', deductions: 'Deductions',
+      gross_total: 'Gross Total', total_deduction: 'Total Deduction',
+      payslip_note: 'Payslip is private to you · Computed live by Paydaes payroll engine (EPF/SOCSO/EIS/PCB per Malaysia statutory rules)',
     },
     topbar: {
       global: 'Global Compliance', notifications: 'Notifications', ai_assistant: 'AI Assistant',

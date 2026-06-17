@@ -21,6 +21,7 @@ ACTIONS: dict[str, tuple[str, str, str]] = {
     # 个人报销
     "claim.create":        ("提交报销", "Submit claim", "my"),
     "claim.self_view":     ("查看本人报销", "View own claims", "my"),
+    "payslip.self_view":   ("查看本人薪资单", "View own payslip", "my"),
     "family.manage":       ("维护家属信息", "Manage family", "my"),
     "travel.apply":        ("差旅申请", "Travel request", "my"),
     # 审批(核心权力)
@@ -47,14 +48,14 @@ ACTIONS: dict[str, tuple[str, str, str]] = {
 # ── 角色 → 操作集合(* 表示全权)──
 ROLE_ACTIONS: dict[str, set[str]] = {
     "employee": {
-        "claim.create", "claim.self_view", "family.manage", "travel.apply",
+        "claim.create", "claim.self_view", "payslip.self_view", "family.manage", "travel.apply",
     },
     "approver": {
-        "claim.create", "claim.self_view", "family.manage", "travel.apply",
+        "claim.create", "claim.self_view", "payslip.self_view", "family.manage", "travel.apply",
         "claim.approve", "claim.batch_approve",
     },
     "hr_admin": {
-        "claim.create", "claim.self_view", "family.manage", "travel.apply",
+        "claim.create", "claim.self_view", "payslip.self_view", "family.manage", "travel.apply",
         "claim.approve", "claim.batch_approve",
         "claim_type.create", "claim_type.update", "claim_type.delete",
         "module_record.create", "module_record.delete", "entitlement.generate",

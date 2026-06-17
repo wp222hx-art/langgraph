@@ -238,6 +238,8 @@ function go(navId) {
   if ($('#mobile-tabbar')) renderTabbar();
   const view = $('#view');
   view.classList.remove('fade-in'); void view.offsetWidth; view.classList.add('fade-in');
+  if (navId === '__me') return renderMeView();          // 移动端·我的(个人中心)
+  if (navId === '__payslip') return renderMyPayslip();  // 移动端·我的薪资单
   if (navId === 'dashboard') return renderDashboard();
   if (navId === 'global') return renderCompliance();
   if (navId === 'cockpit') return renderCockpit();
@@ -1279,7 +1281,10 @@ function buildTabbar() {
 function renderTabbar() {
   const bar = $('#mobile-tabbar'); if (!bar) return;
   bar.innerHTML = MOBILE_TABS.map(tb => {
-    const active = (tb.nav === '__me') ? (S.currentNav === '__me') : (S.currentNav === tb.nav);
+    // '我的' tab 在个人中心或薪资单详情页都保持高亮
+    const active = (tb.nav === '__me')
+      ? (S.currentNav === '__me' || S.currentNav === '__payslip')
+      : (S.currentNav === tb.nav);
     return `<button class="mtab ${active ? 'active' : ''}" onclick="mobileGo('${tb.nav}')">
       <i class="fas ${tb.icon}"></i><span>${t(tb.key)}</span></button>`;
   }).join('') +
@@ -1287,26 +1292,137 @@ function renderTabbar() {
 }
 function mobileGo(nav) {
   if (nav === '__me') { S.currentNav = '__me'; renderMeView(); renderTabbar(); return; }
+  if (nav === '__payslip') { S.currentNav = '__payslip'; renderMyPayslip(); renderTabbar(); return; }
   go(nav); renderTabbar();
 }
 window.mobileGo = mobileGo;
-// 「我的」页(移动端个人中心)
-function renderMeView() {
+// 金额格式(带 2 位小数,本地货币符号)
+function fmtMoney(v, cur) { return (cur || 'RM') + ' ' + Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+// 「我的」页(移动端个人中心)—— 真数据驱动:薪资卡 + 报销进度 + 待办 + 快捷入口
+async function renderMeView() {
   const r = S.role, c = S.company;
+  // 先渲染骨架(头像 + 加载态),再异步填真数据
   $('#view').innerHTML = `<div class="me-page">
     <div class="me-hero">
       <div class="me-avatar" style="background:${r.color}"><i class="fas ${r.icon}"></i></div>
-      <div class="me-name">${nameOf(r)}</div>
-      <div class="me-sub">${c.flag} ${nameOf(c)}</div>
+      <div class="me-name" id="me-name">${nameOf(r)}</div>
+      <div class="me-sub" id="me-sub">${c.flag} ${nameOf(c)}</div>
     </div>
-    <div class="me-list">
-      <div class="me-item" onclick="openAI('ClaimMate','我还能报多少额度?')"><i class="fas fa-wallet text-emerald-500"></i><span>${t('m.me_balance')}</span><i class="fas fa-chevron-right me-arr"></i></div>
+    <div id="me-body">
+      <div class="me-loading"><i class="fas fa-spinner fa-spin"></i> ${t('common.loading')}</div>
+    </div>
+  </div>`;
+  try {
+    const s = await api(`/api/me/summary?role=${S.role.id}&company=${S.company.id}`);
+    if (!s || !s.ok) { drawMeFallback(); return; }
+    // 真实姓名/职位
+    $('#me-name').textContent = s.emp.name;
+    $('#me-sub').textContent = `${c.flag} ${s.emp.designation} · ${s.emp.dept}`;
+    drawMeBody(s);
+  } catch (e) { drawMeFallback(); }
+}
+function drawMeFallback() {
+  const body = $('#me-body'); if (!body) return;
+  body.innerHTML = meQuickLinks();
+}
+function drawMeBody(s) {
+  const body = $('#me-body'); if (!body) return;
+  const cur = s.balance.currency || 'RM';
+  const usedPct = s.balance.annual ? Math.min(100, s.balance.used / s.balance.annual * 100) : 0;
+  const cs = s.claims.by_status || {};
+  body.innerHTML = `
+    <!-- 本月薪资卡(可点进详情) -->
+    <div class="me-paycard" onclick="mobileGo('__payslip')">
+      <div class="me-pc-top">
+        <span class="me-pc-label">${t('me.net_this_month')}</span>
+        <span class="me-pc-month">${s.payslip.month}</span>
+      </div>
+      <div class="me-pc-net">${fmtMoney(s.payslip.net_pay, cur)}</div>
+      <div class="me-pc-sub">
+        <span>${t('me.gross')} ${fmtMoney(s.payslip.gross_total, cur)}</span>
+        <span>${t('me.deduction')} ${fmtMoney(s.payslip.total_deduction, cur)}</span>
+      </div>
+      <div class="me-pc-cta"><i class="fas fa-file-invoice-dollar"></i> ${t('me.view_payslip')} <i class="fas fa-chevron-right"></i></div>
+    </div>
+
+    <!-- 年度报销额度 -->
+    <div class="me-quota">
+      <div class="me-quota-head">
+        <span><i class="fas fa-wallet text-emerald-500"></i> ${t('me.annual_quota')}</span>
+        <span class="me-quota-rem">${fmtMoney(s.balance.remaining, cur)}</span>
+      </div>
+      <div class="me-quota-bar"><div class="me-quota-fill" style="width:${usedPct}%"></div></div>
+      <div class="me-quota-foot">${t('claim.used')} ${fmtMoney(s.balance.used, cur)} / ${fmtMoney(s.balance.annual, cur)}</div>
+    </div>
+
+    <!-- 报销进度统计(真库) -->
+    <div class="me-stats">
+      <div class="me-stat" onclick="mobileGo('my')">
+        <div class="me-stat-n">${cs.pending || 0}</div><div class="me-stat-l">${t('me.st_pending')}</div></div>
+      <div class="me-stat" onclick="mobileGo('my')">
+        <div class="me-stat-n text-emerald-500">${cs.approved || 0}</div><div class="me-stat-l">${t('me.st_approved')}</div></div>
+      <div class="me-stat" onclick="mobileGo('my')">
+        <div class="me-stat-n text-sky-500">${cs.paid || 0}</div><div class="me-stat-l">${t('me.st_paid')}</div></div>
+      <div class="me-stat" onclick="mobileGo('my')">
+        <div class="me-stat-n text-rose-400">${cs.rejected || 0}</div><div class="me-stat-l">${t('me.st_rejected')}</div></div>
+    </div>
+
+    ${s.todos > 0 ? `<div class="me-todo" onclick="mobileGo('my')">
+      <i class="fas fa-bell"></i> <span>${t('me.todo_prefix')} <b>${s.todos}</b> ${t('me.todo_suffix')}</span>
+      <i class="fas fa-chevron-right me-arr"></i></div>` : ''}
+
+    ${meQuickLinks(s)}`;
+}
+function meQuickLinks(s) {
+  const fam = s && s.family_count ? `<span class="me-badge">${s.family_count}</span>` : '';
+  return `<div class="me-list">
+      <div class="me-item" onclick="mobileGo('__payslip')"><i class="fas fa-file-invoice-dollar text-amber-500"></i><span>${t('me.my_payslip')}</span><i class="fas fa-chevron-right me-arr"></i></div>
       <div class="me-item" onclick="mobileGo('my')"><i class="fas fa-receipt text-teal-500"></i><span>${t('m.me_claims')}</span><i class="fas fa-chevron-right me-arr"></i></div>
-      <div class="me-item" onclick="openAI('ClaimMate','帮我登记家属信息')"><i class="fas fa-users text-indigo-500"></i><span>${t('m.me_family')}</span><i class="fas fa-chevron-right me-arr"></i></div>
+      <div class="me-item" onclick="openAI('ClaimMate','我还能报多少额度?')"><i class="fas fa-robot text-emerald-500"></i><span>${t('me.ask_ai_quota')}</span><i class="fas fa-chevron-right me-arr"></i></div>
+      <div class="me-item" onclick="openAI('ClaimMate','帮我登记家属信息')"><i class="fas fa-users text-indigo-500"></i><span>${t('m.me_family')}</span>${fam}<i class="fas fa-chevron-right me-arr"></i></div>
       <div class="me-item" onclick="$('#help-btn').click()"><i class="fas fa-circle-question text-slate-400"></i><span>${t('help.open')}</span><i class="fas fa-chevron-right me-arr"></i></div>
       <div class="me-item" onclick="$('#role-switch').click()"><i class="fas fa-right-left text-slate-400"></i><span>${t('m.me_switch')}</span><i class="fas fa-chevron-right me-arr"></i></div>
-    </div></div>`;
+    </div>`;
 }
+
+// 「我的薪资单」详情页(手机友好:收入/扣除明细 + 实发)
+async function renderMyPayslip() {
+  $('#view').innerHTML = `<div class="me-page"><div class="me-loading"><i class="fas fa-spinner fa-spin"></i> ${t('common.loading')}</div></div>`;
+  try {
+    const p = await api(`/api/me/payslip?role=${S.role.id}`);
+    if (!p || !p.ok) { $('#view').innerHTML = `<div class="me-page"><div class="me-loading">${t('cockpit.denied')}</div></div>`; return; }
+    const cur = 'RM';
+    const earn = p.earnings.map(e => `<div class="ps-row"><span>${S.lang === 'en' ? e.label_en : e.label_zh}</span><span class="ps-amt">${fmtMoney(e.amount, cur)}</span></div>`).join('');
+    const ded = p.deductions.map(d => `<div class="ps-row"><span>${S.lang === 'en' ? d.label_en : d.label_zh}</span><span class="ps-amt ps-neg">- ${fmtMoney(d.amount, cur)}</span></div>`).join('');
+    $('#view').innerHTML = `<div class="me-page ps-page">
+      <div class="ps-back" onclick="mobileGo('__me')"><i class="fas fa-chevron-left"></i> ${t('me.back')}</div>
+      <div class="ps-head">
+        <div class="ps-title">${t('me.payslip_title')}</div>
+        <div class="ps-month">${p.month}</div>
+        <div class="ps-emp">${p.emp.name} · ${p.emp.designation}</div>
+        <div class="ps-emp-sub">${p.emp.emp_no} · ${p.emp.dept}</div>
+      </div>
+      <div class="ps-net-card">
+        <div class="ps-net-label">${t('me.net_pay')}</div>
+        <div class="ps-net-val">${fmtMoney(p.net_pay, cur)}</div>
+        <div class="ps-net-bank"><i class="fas fa-building-columns"></i> ${p.emp.bank_code || '—'} · ****${(p.emp.bank_acct || '').slice(-4)}</div>
+      </div>
+      <div class="ps-section">
+        <div class="ps-sec-title"><i class="fas fa-plus-circle text-emerald-500"></i> ${t('me.earnings')}</div>
+        ${earn}
+        <div class="ps-row ps-total"><span>${t('me.gross_total')}</span><span class="ps-amt">${fmtMoney(p.gross_total, cur)}</span></div>
+      </div>
+      <div class="ps-section">
+        <div class="ps-sec-title"><i class="fas fa-minus-circle text-rose-400"></i> ${t('me.deductions')}</div>
+        ${ded}
+        <div class="ps-row ps-total"><span>${t('me.total_deduction')}</span><span class="ps-amt ps-neg">- ${fmtMoney(p.total_deduction, cur)}</span></div>
+      </div>
+      <div class="ps-note"><i class="fas fa-shield-halved text-emerald-400"></i> ${t('me.payslip_note')}</div>
+    </div>`;
+  } catch (e) { $('#view').innerHTML = `<div class="me-page"><div class="me-loading">${t('claim.load_err')}</div></div>`; }
+}
+window.renderMyPayslip = renderMyPayslip;
 
 function showLangPop(e) {
   const html = S.languages.map(l => `<div class="pop-item ${l.code === S.lang ? 'active' : ''}" onclick="switchLang('${l.code}')">

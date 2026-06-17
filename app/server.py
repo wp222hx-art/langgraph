@@ -615,6 +615,91 @@ def cockpit_explain(company: str = "my", month: str = "2026-05", lang: str = "zh
     return analytics.explain_cost_change(company, month, lang)
 
 
+# ═══════ 员工自助门户「我的」(employee 权限) ═══════
+# 演示绑定:登录员工 = 薪资名单第一人(MY001)。生产环境应由会话/JWT 注入 emp_no。
+DEMO_SELF_EMP = "MY001"
+
+
+def _self_employee(emp_no: str | None = None):
+    """取得当前登录员工的薪资档案(默认演示员工)。"""
+    from app.data import payroll_data as P
+    target = emp_no or DEMO_SELF_EMP
+    for e in P.PAYROLL_EMPLOYEES:
+        if e["emp_no"] == target:
+            return e
+    return P.PAYROLL_EMPLOYEES[0]
+
+
+@app.get("/api/me/payslip")
+def me_payslip(role: str = "employee", emp_no: str | None = None, month: str = "2026-05"):
+    """员工自助·我的薪资单(仅本人,不暴露他人) —— 需 payslip.self_view。"""
+    if not permissions.can(role, "payslip.self_view"):
+        return permissions.deny_payload(role, "payslip.self_view")
+    from app.data import payroll_data as P
+    e = _self_employee(emp_no)
+    m = P.compute_monthly(e)
+    # 收入明细
+    earnings = [
+        {"label_zh": "基本工资", "label_en": "Basic Salary", "amount": m["basic_pay"]},
+        {"label_zh": "固定津贴", "label_en": "Fixed Allowance", "amount": m["allow_fixed"]},
+        {"label_zh": "免税津贴", "label_en": "Tax-exempt Allowance", "amount": m["allow_taxexempt"]},
+        {"label_zh": "加班费", "label_en": "Overtime", "amount": m["ot_amount"]},
+        {"label_zh": "佣金", "label_en": "Commission", "amount": m.get("commission", 0)},
+        {"label_zh": "奖金", "label_en": "Bonus", "amount": m.get("bonus_month", 0)},
+    ]
+    earnings = [x for x in earnings if x["amount"]]
+    # 扣除明细
+    deductions = [
+        {"label_zh": "EPF 公积金(员工)", "label_en": "EPF (Employee)", "amount": m["epf_emp"]},
+        {"label_zh": "SOCSO 社险(员工)", "label_en": "SOCSO (Employee)", "amount": m["socso_emp"]},
+        {"label_zh": "EIS 就业保险(员工)", "label_en": "EIS (Employee)", "amount": m["eis_emp"]},
+        {"label_zh": "PCB 预扣税", "label_en": "PCB (MTD)", "amount": m["pcb"]},
+        {"label_zh": "天课 Zakat", "label_en": "Zakat", "amount": m.get("zakat", 0)},
+    ]
+    deductions = [x for x in deductions if x["amount"]]
+    return {
+        "ok": True, "month": month,
+        "emp": {"emp_no": m["emp_no"], "name": m["name"], "designation": m["designation"],
+                "dept": m["dept"], "ic_no": m["ic_no"], "epf_no": m["epf_no"],
+                "bank_code": m.get("bank_code", ""), "bank_acct": m.get("bank_acct", "")},
+        "earnings": earnings, "deductions": deductions,
+        "gross_total": m["gross_total"], "total_deduction": m["total_deduction"],
+        "net_pay": m["net_pay"],
+        "ot_detail": m.get("ot_detail", {}),
+    }
+
+
+@app.get("/api/me/summary")
+def me_summary(role: str = "employee", company: str = "my", emp_no: str | None = None):
+    """员工自助首屏聚合: 本月净发 + 年度额度 + 报销进度统计 + 待办计数。"""
+    if not permissions.can(role, "claim.self_view"):
+        return permissions.deny_payload(role, "claim.self_view")
+    from app.data import payroll_data as P
+    e = _self_employee(emp_no)
+    m = P.compute_monthly(e)
+    # 真实报销库统计(按公司,演示员工无独立 emp_id 时取全公司聚合作为"我的")
+    db_emp = db.get_employee(None, company)
+    db_emp_id = db_emp["id"] if db_emp else None
+    bal = db.get_balance(db_emp_id, company)
+    my_claims = db.list_claims(company, emp_id=db_emp_id) if db_emp_id else db.list_claims(company)
+    by_status = {"pending": 0, "approved": 0, "rejected": 0, "paid": 0}
+    for c in my_claims:
+        st = c.get("status", "")
+        by_status[st] = by_status.get(st, 0) + 1
+    pending = by_status.get("pending", 0)
+    return {
+        "ok": True,
+        "emp": {"emp_no": m["emp_no"], "name": m["name"], "designation": m["designation"], "dept": m["dept"]},
+        "payslip": {"net_pay": m["net_pay"], "gross_total": m["gross_total"],
+                    "total_deduction": m["total_deduction"], "month": "2026-05"},
+        "balance": {"annual": bal.get("annual", 0), "used": bal.get("used", 0),
+                    "remaining": bal.get("remaining", 0), "currency": bal.get("currency", "MYR")},
+        "claims": {"total": len(my_claims), "by_status": by_status},
+        "todos": pending,
+        "family_count": len(db.get_family(db_emp_id, company)),
+    }
+
+
 @app.get("/api/statutory/forms")
 def statutory_forms():
     """法定表格清单(供前端渲染)。"""
