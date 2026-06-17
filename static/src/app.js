@@ -253,6 +253,7 @@ function go(navId) {
   const view = $('#view');
   view.classList.remove('fade-in'); void view.offsetWidth; view.classList.add('fade-in');
   if (navId === '__arch') return renderArchitecture();  // 系统架构图谱+说明书(点 Logo 进入)
+  if (navId === '__roadmap') return renderRoadmap();    // 商业化路线图(从架构页进入)
   if (navId === '__me') return renderMeView();          // 移动端·我的(个人中心)
   if (navId === '__payslip') return renderMyPayslip();  // 移动端·我的薪资单
   // 员工(手机模式)用专属轻量首页,而非管理者的桌面大屏
@@ -2565,11 +2566,222 @@ function renderArchitecture() {
       <div class="arch-waves">${waveHtml}</div>
     </section>
 
+    <section class="arch-sec">
+      <div class="rm-entry" id="goto-roadmap">
+        <div class="rm-entry-ic"><i class="fas fa-rocket"></i></div>
+        <div class="rm-entry-tx">
+          <div class="rm-entry-zh">商业化路线图 · 从原型到正式商用</div>
+          <div class="rm-entry-en">Commercialization Roadmap · From Prototype to Production</div>
+        </div>
+        <i class="fas fa-arrow-right rm-entry-arrow"></i>
+      </div>
+    </section>
+
     <footer class="arch-foot">
       Paydaes ClaimGPT · 集团版 V3.0 · 由 LangGraph 编排引擎驱动<br>
       <i>Paydaes ClaimGPT · Enterprise V3.0 · Powered by LangGraph</i>
     </footer>
   </div>`;
+  const rmBtn = $('#goto-roadmap');
+  if (rmBtn) rmBtn.onclick = () => go('__roadmap');
 }
 window.renderArchitecture = renderArchitecture;
+
+// ═══════════════════════════════════════════════
+// 商业化路线图 · Commercialization Roadmap
+// 从已跑通的原型 → 正式商用(多用户·多国家·全程最强AI辅助开发)
+// ═══════════════════════════════════════════════
+function renderRoadmap() {
+  const G = S.group ? S.group : { logo: 'P', color: '#20c997' };
+
+  // ── 现状基线(真实家底) ──
+  const baseline = [
+    ['6,677 行', 'Python 后端', '13 个 AI Agent 编排已跑通'],
+    ['60 个', 'API 接口', '报销/审批/薪资/报表全链路'],
+    ['7 国', '多租户税则', 'SG/MY/TH/VN/ID/HK/CN'],
+    ['11 张表', 'SQLite 持久化', '真实写库,非内存模拟'],
+  ];
+
+  // ── 五大阶段路线图 ──
+  const phases = [
+    { p:'P0', wk:'第 1-3 周', zh:'生产加固', en:'Production Hardening', color:'#ef4444',
+      goal_zh:'补齐"从演示到生产"的安全与质量底座', goal_en:'Build the security & quality foundation',
+      items:[
+        ['真实认证体系', 'JWT + 会话 + 密码加密(替换"选身份"演示模式)'],
+        ['权限分级 RBAC', '6 角色 × 18 模块的细粒度权限矩阵'],
+        ['接口安全加固', '限流/防注入/审计日志/敏感数据脱敏'],
+        ['自动化测试', 'AI 生成单元+集成测试,覆盖核心 60 接口'],
+      ]},
+    { p:'P1', wk:'第 4-6 周', zh:'上云部署', en:'Cloud Deployment', color:'#f59e0b',
+      goal_zh:'拿到永久稳定地址,数据不再丢失', goal_en:'Permanent URL + persistent data',
+      items:[
+        ['数据库升级', 'SQLite → PostgreSQL(Supabase/云托管)'],
+        ['容器化部署', 'Docker + Railway/云服务器,CI/CD 自动发布'],
+        ['对象存储', '票据图片/导出文件迁移到 S3/R2 云存储'],
+        ['域名+HTTPS', '绑定企业域名,SSL 证书,CDN 加速'],
+      ]},
+    { p:'P2', wk:'第 7-12 周', zh:'多租户 SaaS 化', en:'Multi-Tenant SaaS', color:'#20c997',
+      goal_zh:'一套系统服务 N 个企业客户,数据彻底隔离', goal_en:'One system, N enterprise clients, fully isolated',
+      items:[
+        ['租户隔离架构', '企业级数据隔离,每客户独立数据空间'],
+        ['企业自助开通', '注册→建组织→邀成员→配模块 全自助'],
+        ['订阅计费系统', '按席位/按用量计费,对接 Stripe 支付'],
+        ['并发性能优化', '连接池/缓存/异步队列,支撑千人同时在线'],
+      ]},
+    { p:'P3', wk:'第 13-18 周', zh:'多国合规深化', en:'Multi-Country Compliance', color:'#3b82f6',
+      goal_zh:'每个国家的税则/法定报表真实可用、随政策更新', goal_en:'Real, auditable, policy-synced compliance per country',
+      items:[
+        ['真实税率引擎', '7 国 IRAS/LHDN 等真实税表,可配置版本化'],
+        ['法定报表落地', 'EPF/EA Form/IR8A 等格式与官方一致并可申报'],
+        ['会计直推接口', '凭证直推 Xero/QuickBooks/SQL Account'],
+        ['本地化与货币', '多语言/多币种/本地节假日与汇率自动更新'],
+      ]},
+    { p:'P4', wk:'第 19-24 周', zh:'商业化运营', en:'Commercial Operations', color:'#8b5cf6',
+      goal_zh:'可签约、可交付、可持续运营的正式商用形态', goal_en:'Contract-ready, deliverable, sustainable operations',
+      items:[
+        ['客户成功体系', '入驻引导/帮助中心/工单/SLA 保障'],
+        ['数据看板与BI', '管理者驾驶舱,成本/合规/效率多维分析'],
+        ['安全合规认证', '数据隐私合规(PDPA/GDPR),渗透测试'],
+        ['灾备与监控', '自动备份/告警/7×24 监控,99.9% 可用性'],
+      ]},
+  ];
+
+  // ── 多用户·多国家稳定性五支柱 ──
+  const pillars = [
+    ['fa-key', '身份与权限', 'Identity & Access', 'JWT 认证 + RBAC 权限 + 多租户隔离,确保每个用户只看到自己该看的数据'],
+    ['fa-bolt', '高并发性能', 'Performance', '连接池 + 缓存 + 异步队列,千人同时在线不卡顿,接口 P95 < 300ms'],
+    ['fa-globe', '多国合规', 'Compliance', '7 国税则版本化管理,政策更新即时同步,报表与官方格式一致'],
+    ['fa-database', '数据可靠', 'Reliability', '云数据库 + 自动备份 + 灾备切换,数据零丢失,RPO < 5 分钟'],
+    ['fa-chart-line', '可观测运维', 'Observability', '全链路监控 + 告警 + 审计日志,故障 5 分钟内发现,99.9% 可用'],
+  ];
+
+  // ── 精简团队配置(全程最强 AI 辅助开发) ──
+  const team = [
+    ['1 人', '产品负责人 / 您', '需求定义、商业决策、客户对接'],
+    ['1-2 人', '全栈工程师 + AI', 'AI 辅助开发,1 人产出≈传统 3-4 人'],
+    ['0.5 人', '合规顾问(兼职)', '提供各国真实税则与法定报表口径'],
+    ['0.5 人', '测试/运维(可AI替代)', 'AI 自动化测试 + 云平台托管运维'],
+  ];
+
+  // ── 关键里程碑(可商用判定标准) ──
+  const milestones = [
+    ['M1 · 第3周', '安全可上线', '真实认证 + 权限 + 测试通过', '#ef4444'],
+    ['M2 · 第6周', '云端永久可访问', '生产环境稳定运行,数据持久化', '#f59e0b'],
+    ['M3 · 第12周', '可服务首个付费客户', 'SaaS 多租户 + 计费打通', '#20c997'],
+    ['M4 · 第18周', '多国合规真实可用', '税则/报表/会计接口落地', '#3b82f6'],
+    ['M5 · 第24周', '✅ 正式商业化运营', 'SLA/监控/灾备/合规认证齐备', '#8b5cf6'],
+  ];
+
+  const baselineHtml = baseline.map(b => `
+    <div class="rm-base-card">
+      <div class="rm-base-num">${b[0]}</div>
+      <div class="rm-base-lbl">${b[1]}</div>
+      <div class="rm-base-desc">${b[2]}</div>
+    </div>`).join('');
+
+  const phaseHtml = phases.map((ph, i) => `
+    <div class="rm-phase" style="--pc:${ph.color}">
+      <div class="rm-phase-head">
+        <span class="rm-phase-tag">${ph.p}</span>
+        <div class="rm-phase-titles">
+          <div class="rm-phase-zh">${ph.zh}</div>
+          <div class="rm-phase-en">${ph.en}</div>
+        </div>
+        <span class="rm-phase-wk">${ph.wk}</span>
+      </div>
+      <div class="rm-phase-goal">🎯 ${ph.goal_zh}<br><i>${ph.goal_en}</i></div>
+      <div class="rm-phase-items">
+        ${ph.items.map(it => `<div class="rm-item"><b>${it[0]}</b><span>${it[1]}</span></div>`).join('')}
+      </div>
+    </div>`).join('');
+
+  // 甘特时间轴(24 周)
+  const ganttRows = phases.map(ph => {
+    const m = ph.wk.match(/(\d+)-(\d+)/);
+    const s = m ? parseInt(m[1]) : 1, e = m ? parseInt(m[2]) : 24;
+    const left = ((s-1)/24*100).toFixed(1), width = ((e-s+1)/24*100).toFixed(1);
+    return `<div class="rm-gantt-row">
+      <div class="rm-gantt-lbl"><b>${ph.p}</b> ${ph.zh}</div>
+      <div class="rm-gantt-track"><div class="rm-gantt-bar" style="left:${left}%;width:${width}%;background:${ph.color}">${ph.wk.replace('第 ','').replace(' 周','w')}</div></div>
+    </div>`;
+  }).join('');
+
+  const pillarHtml = pillars.map(p => `
+    <div class="rm-pillar">
+      <div class="rm-pillar-ic"><i class="fas ${p[0]}"></i></div>
+      <div class="rm-pillar-zh">${p[1]}</div>
+      <div class="rm-pillar-en">${p[2]}</div>
+      <div class="rm-pillar-desc">${p[3]}</div>
+    </div>`).join('');
+
+  const teamHtml = team.map(t => `
+    <tr><td class="rm-team-n">${t[0]}</td><td><b>${t[1]}</b></td><td>${t[2]}</td></tr>`).join('');
+
+  const msHtml = milestones.map(m => `
+    <div class="rm-ms" style="--mc:${m[3]}">
+      <div class="rm-ms-dot"></div>
+      <div class="rm-ms-body">
+        <div class="rm-ms-when">${m[0]}</div>
+        <div class="rm-ms-what">${m[1]}</div>
+        <div class="rm-ms-crit">${m[2]}</div>
+      </div>
+    </div>`).join('');
+
+  $('#view').innerHTML = `
+  <div class="arch-page rm-page">
+    <header class="arch-hero" style="--hc:${G.color}">
+      <div class="arch-hero-logo" style="background:${G.color}">${G.logo}</div>
+      <h1>商业化路线图 <span class="arch-hero-tag-en">Commercialization Roadmap</span></h1>
+      <p class="arch-hero-sub">从已跑通的产品原型,到多用户·多国家稳定运营的正式商用<br>
+        <i>From a working prototype to multi-user, multi-country production — AI-accelerated delivery</i></p>
+      <div class="rm-hero-badge">⚡ 全程最强 AI 辅助开发 · 预计 <b>24 周</b>达成正式商用 / AI-accelerated · ~24 weeks to production</div>
+    </header>
+
+    <section class="arch-sec">
+      ${biH2('fa-flag-checkered', '现状基线 · 已完成约 75% 功能原型', 'Baseline · ~75% Prototype Done')}
+      <div class="rm-baseline">${baselineHtml}</div>
+    </section>
+
+    <section class="arch-sec">
+      ${biH2('fa-map-signs', '五阶段路线图', 'Five-Phase Roadmap')}
+      <div class="rm-phases">${phaseHtml}</div>
+    </section>
+
+    <section class="arch-sec">
+      ${biH2('fa-bars-staggered', '时间轴 · 24 周甘特图', 'Timeline · 24-Week Gantt')}
+      <div class="rm-gantt">
+        <div class="rm-gantt-axis"><span>W1</span><span>W6</span><span>W12</span><span>W18</span><span>W24</span></div>
+        ${ganttRows}
+      </div>
+    </section>
+
+    <section class="arch-sec">
+      ${biH2('fa-shield-halved', '多用户·多国家稳定性五支柱', '5 Pillars of Multi-User · Multi-Country Stability')}
+      <div class="rm-pillars">${pillarHtml}</div>
+    </section>
+
+    <section class="arch-sec">
+      ${biH2('fa-users-gear', '精简团队配置(AI 提效)', 'Lean Team (AI-Boosted)')}
+      <table class="rm-team-table">
+        <thead><tr><th>人力 / Headcount</th><th>角色 / Role</th><th>职责 / Responsibility</th></tr></thead>
+        <tbody>${teamHtml}</tbody>
+      </table>
+      <div class="rm-team-note">💡 全程最强 AI 辅助开发:1 名全栈工程师产出 ≈ 传统 3-4 人团队,大幅压缩周期与成本<br>
+        <i>With top-tier AI assistance, 1 full-stack engineer ≈ a traditional 3-4 person team</i></div>
+    </section>
+
+    <section class="arch-sec">
+      ${biH2('fa-trophy', '关键里程碑 · 可商用判定', 'Key Milestones · Go-Live Criteria')}
+      <div class="rm-milestones">${msHtml}</div>
+    </section>
+
+    <footer class="arch-foot">
+      Paydaes ClaimGPT · 商业化路线图 V1.0 · ${new Date().getFullYear()}<br>
+      <i>Commercialization Roadmap · Subject to scope & resource adjustment</i>
+    </footer>
+  </div>`;
+  const ws = document.querySelector('#workspace');
+  if (ws) ws.scrollTo(0, 0);
+}
+window.renderRoadmap = renderRoadmap;
 
