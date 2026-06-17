@@ -34,6 +34,11 @@ async function boot() {
   // 默认 sys_admin;支持 ?role=employee 等 URL 参数(便于直达指定身份/演示)
   const _qpRole = new URLSearchParams(location.search).get('role');
   S.role = (_qpRole && d.roles.find(r => r.id === _qpRole)) || d.roles.find(r => r.id === 'sys_admin');
+  // 员工(手机端)演示员工 MY001 隶属马来西亚公司,默认锁定 my 公司,保证额度/报销/薪资全链路 RM 一致
+  if (S.role && S.role.id === 'employee') {
+    const myCo = S.group.companies.find(c => c.id === 'my');
+    if (myCo) S.company = myCo;
+  }
   S.currentAgent = d.agents[0];
   // i18n:语言切换时重扫静态 DOM + 重渲染动态区(导航/当前页/智能体条)
   onLangChange(() => {
@@ -721,6 +726,8 @@ window.renderCockpit = renderCockpit;
 
 function selfClaimView(m) {
   const b = m.balance;
+  // 手机端(员工)货币统一锁定为 RM,与额度卡/薪资单/个人中心保持一致
+  if (isMobileMode()) b.currency = 'RM';
   return `<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="panel p-5"><div class="text-sm text-slate-400">我的年度额度</div>
       <div class="text-3xl font-bold text-slate-900 mt-1">${b.remaining}<span class="text-base text-slate-400">/${b.annual}</span></div>
@@ -740,7 +747,7 @@ function selfClaimView(m) {
         <input class="ac-input" id="cf-merchant" placeholder="${t('claim.f_merchant')}">
         <div class="flex gap-2">
           <input class="ac-input flex-1" id="cf-amount" type="number" step="0.01" placeholder="${t('claim.f_amount')}">
-          <input class="ac-input w-24" id="cf-currency" placeholder="${b.currency || 'SGD'}" value="${b.currency || 'SGD'}">
+          <input class="ac-input w-24" id="cf-currency" placeholder="${b.currency || 'RM'}" value="${b.currency || 'RM'}">
         </div>
         <div class="flex gap-2">
           <input class="ac-input flex-1" id="cf-receipt" placeholder="${t('claim.f_receipt')}">
@@ -1275,7 +1282,7 @@ function applyMode() {
 // 底部 Tab(员工自助:首页/报销/我的)
 const MOBILE_TABS = [
   { nav: 'dashboard', icon: 'fa-house', key: 'm.tab_home' },
-  { nav: 'my', icon: 'fa-receipt', key: 'm.tab_claim' },
+  { nav: 'my_claim', icon: 'fa-receipt', key: 'm.tab_claim' },
   { nav: '__me', icon: 'fa-user', key: 'm.tab_me' },
 ];
 function buildTabbar() {
@@ -1340,7 +1347,7 @@ function drawMobileHome(s) {
       <i class="fas fa-chevron-right mh-pay-arr"></i>
     </div>
 
-    ${s.todos > 0 ? `<div class="me-todo" onclick="mobileGo('my')">
+    ${s.todos > 0 ? `<div class="me-todo" onclick="mobileGo('my_claim')">
       <i class="fas fa-bell"></i><span>${t('me.todo_prefix')} <b>${s.todos}</b> ${t('me.todo_suffix')}</span>
       <i class="fas fa-chevron-right me-arr"></i></div>` : ''}
 
@@ -1349,7 +1356,7 @@ function drawMobileHome(s) {
       <div class="mh-act" onclick="openAI('ClaimMate','我要拍照报销')">
         <div class="mh-act-ico" style="background:#ecfdf5;color:#059669"><i class="fas fa-camera"></i></div>
         <span>${t('mh.act_photo')}</span></div>
-      <div class="mh-act" onclick="mobileGo('my')">
+      <div class="mh-act" onclick="mobileGo('my_claim')">
         <div class="mh-act-ico" style="background:#eff6ff;color:#2563eb"><i class="fas fa-receipt"></i></div>
         <span>${t('mh.act_claim')}</span></div>
       <div class="mh-act" onclick="mobileGo('__payslip')">
@@ -1364,10 +1371,10 @@ function drawMobileHome(s) {
     <div class="mh-card">
       <div class="mh-card-title"><i class="fas fa-chart-simple text-teal-500"></i> ${t('mh.claim_status')}</div>
       <div class="me-stats" style="margin:0">
-        <div class="me-stat" onclick="mobileGo('my')"><div class="me-stat-n">${cs.pending || 0}</div><div class="me-stat-l">${t('me.st_pending')}</div></div>
-        <div class="me-stat" onclick="mobileGo('my')"><div class="me-stat-n text-emerald-500">${cs.approved || 0}</div><div class="me-stat-l">${t('me.st_approved')}</div></div>
-        <div class="me-stat" onclick="mobileGo('my')"><div class="me-stat-n text-sky-500">${cs.paid || 0}</div><div class="me-stat-l">${t('me.st_paid')}</div></div>
-        <div class="me-stat" onclick="mobileGo('my')"><div class="me-stat-n text-rose-400">${cs.rejected || 0}</div><div class="me-stat-l">${t('me.st_rejected')}</div></div>
+        <div class="me-stat" onclick="mobileGo('my_claim')"><div class="me-stat-n">${cs.pending || 0}</div><div class="me-stat-l">${t('me.st_pending')}</div></div>
+        <div class="me-stat" onclick="mobileGo('my_claim')"><div class="me-stat-n text-emerald-500">${cs.approved || 0}</div><div class="me-stat-l">${t('me.st_approved')}</div></div>
+        <div class="me-stat" onclick="mobileGo('my_claim')"><div class="me-stat-n text-sky-500">${cs.paid || 0}</div><div class="me-stat-l">${t('me.st_paid')}</div></div>
+        <div class="me-stat" onclick="mobileGo('my_claim')"><div class="me-stat-n text-rose-400">${cs.rejected || 0}</div><div class="me-stat-l">${t('me.st_rejected')}</div></div>
       </div>
     </div>
 
@@ -1382,7 +1389,7 @@ function drawMobileHome(s) {
 function mhActions() {
   return `<div class="mh-actions">
       <div class="mh-act" onclick="openAI('ClaimMate','我要拍照报销')"><div class="mh-act-ico" style="background:#ecfdf5;color:#059669"><i class="fas fa-camera"></i></div><span>${t('mh.act_photo')}</span></div>
-      <div class="mh-act" onclick="mobileGo('my')"><div class="mh-act-ico" style="background:#eff6ff;color:#2563eb"><i class="fas fa-receipt"></i></div><span>${t('mh.act_claim')}</span></div>
+      <div class="mh-act" onclick="mobileGo('my_claim')"><div class="mh-act-ico" style="background:#eff6ff;color:#2563eb"><i class="fas fa-receipt"></i></div><span>${t('mh.act_claim')}</span></div>
       <div class="mh-act" onclick="mobileGo('__payslip')"><div class="mh-act-ico" style="background:#fffbeb;color:#d97706"><i class="fas fa-file-invoice-dollar"></i></div><span>${t('me.my_payslip')}</span></div>
       <div class="mh-act" onclick="$('#role-switch').click()"><div class="mh-act-ico" style="background:#f1f5f9;color:#64748b"><i class="fas fa-right-left"></i></div><span>${t('m.me_switch')}</span></div>
     </div>`;
@@ -1447,17 +1454,17 @@ function drawMeBody(s) {
 
     <!-- 报销进度统计(真库) -->
     <div class="me-stats">
-      <div class="me-stat" onclick="mobileGo('my')">
+      <div class="me-stat" onclick="mobileGo('my_claim')">
         <div class="me-stat-n">${cs.pending || 0}</div><div class="me-stat-l">${t('me.st_pending')}</div></div>
-      <div class="me-stat" onclick="mobileGo('my')">
+      <div class="me-stat" onclick="mobileGo('my_claim')">
         <div class="me-stat-n text-emerald-500">${cs.approved || 0}</div><div class="me-stat-l">${t('me.st_approved')}</div></div>
-      <div class="me-stat" onclick="mobileGo('my')">
+      <div class="me-stat" onclick="mobileGo('my_claim')">
         <div class="me-stat-n text-sky-500">${cs.paid || 0}</div><div class="me-stat-l">${t('me.st_paid')}</div></div>
-      <div class="me-stat" onclick="mobileGo('my')">
+      <div class="me-stat" onclick="mobileGo('my_claim')">
         <div class="me-stat-n text-rose-400">${cs.rejected || 0}</div><div class="me-stat-l">${t('me.st_rejected')}</div></div>
     </div>
 
-    ${s.todos > 0 ? `<div class="me-todo" onclick="mobileGo('my')">
+    ${s.todos > 0 ? `<div class="me-todo" onclick="mobileGo('my_claim')">
       <i class="fas fa-bell"></i> <span>${t('me.todo_prefix')} <b>${s.todos}</b> ${t('me.todo_suffix')}</span>
       <i class="fas fa-chevron-right me-arr"></i></div>` : ''}
 
@@ -1467,7 +1474,7 @@ function meQuickLinks(s) {
   const fam = s && s.family_count ? `<span class="me-badge">${s.family_count}</span>` : '';
   return `<div class="me-list">
       <div class="me-item" onclick="mobileGo('__payslip')"><i class="fas fa-file-invoice-dollar text-amber-500"></i><span>${t('me.my_payslip')}</span><i class="fas fa-chevron-right me-arr"></i></div>
-      <div class="me-item" onclick="mobileGo('my')"><i class="fas fa-receipt text-teal-500"></i><span>${t('m.me_claims')}</span><i class="fas fa-chevron-right me-arr"></i></div>
+      <div class="me-item" onclick="mobileGo('my_claim')"><i class="fas fa-receipt text-teal-500"></i><span>${t('m.me_claims')}</span><i class="fas fa-chevron-right me-arr"></i></div>
       <div class="me-item" onclick="openAI('ClaimMate','我还能报多少额度?')"><i class="fas fa-robot text-emerald-500"></i><span>${t('me.ask_ai_quota')}</span><i class="fas fa-chevron-right me-arr"></i></div>
       <div class="me-item" onclick="openAI('ClaimMate','帮我登记家属信息')"><i class="fas fa-users text-indigo-500"></i><span>${t('m.me_family')}</span>${fam}<i class="fas fa-chevron-right me-arr"></i></div>
       <div class="me-item" onclick="$('#help-btn').click()"><i class="fas fa-circle-question text-slate-400"></i><span>${t('help.open')}</span><i class="fas fa-chevron-right me-arr"></i></div>

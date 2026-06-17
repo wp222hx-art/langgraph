@@ -687,3 +687,19 @@ body.mode-mobile .chart-box{ height:220px; }
 /* 通用卡片(报销近况) */
 .mh-card { background:#fff; border-radius:14px; padding:14px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.05); }
 .mh-card-title { font-size:13px; font-weight:700; color:#334155; margin-bottom:11px; display:flex; align-items:center; gap:7px; }
+
+/* ════════ 员工手机端·报销页(self_claim)专属优化 ════════ */
+body.mode-mobile .page-title { font-size:19px; }
+body.mode-mobile #view > .flex .text-slate-400 { font-size:12px; }
+/* 单列堆叠 + 圆角卡片 + 触控间距 */
+body.mode-mobile .panel { border-radius:16px; padding:16px !important; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+body.mode-mobile .ac-input { height:44px; font-size:14px; border-radius:11px; }
+body.mode-mobile select.ac-input { height:44px; }
+body.mode-mobile .ocr-drop { padding:20px; border-radius:13px; }
+body.mode-mobile .ocr-drop .fa-cloud-arrow-up { font-size:30px !important; }
+body.mode-mobile .btn-primary, body.mode-mobile .btn-ai { height:46px; font-size:15px; border-radius:12px; }
+/* 年度额度大字更醒目 */
+body.mode-mobile .panel .text-3xl { font-size:30px; }
+/* 报销记录表横向可滑 */
+body.mode-mobile #claims-box { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+body.mode-mobile #claims-box table { min-width:480px; }

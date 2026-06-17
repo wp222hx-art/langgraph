@@ -24,6 +24,14 @@
   - `GET /api/me/summary?role=&company=&emp_no=` — 个人首屏聚合(薪资概览+额度+报销统计+待办+家属数)
   - `GET /api/me/payslip?role=&emp_no=&month=` — 我的薪资单(收入/扣除明细+实发)—— 需 `payslip.self_view`
 - **新增权限** `payslip.self_view`(授予 employee/approver/hr_admin/sys_admin,人人可查本人薪资单)。
+
+### 🧾 员工手机端「报销」页打通(最新 · 第六波)
+修复员工移动 App 底部「报销」tab 与「我的报销」入口点进去显示 **"my / 模块开发中"空壳**的问题:
+
+- **路由根因**:底部 tab 与各处「我的报销」链接误指向 `my`(导航**分组**节点,非真实模块)→ `renderModule('my')` 命中通用占位符。已将全部 13 处 `mobileGo('my')` + 底部 tab 统一改指真实自助报销模块 **`my_claim`**(layout `self_claim`)。
+- **页面内容**:现正确渲染完整自助报销页 = 年度额度卡(RM 21,400/30,000 + 进度条)+ 拍照报销(AI)+ 发票 OCR 上传 + 真提交表单 + 实时报销记录(读真库:亚航/客户宴请/滴滴/全季/携程/海底捞)。
+- **货币与公司一致性**:员工(employee)登录默认锁定**马来西亚公司(my)**,额度/报销/薪资单全链路统一 **RM**(`selfClaimView` 手机端币种归一化为 RM);补 `claim.st_posted`(已入账/Posted)i18n,消除状态列未翻译 key。
+- **手机端样式优化**:`self_claim` 视图单列堆叠 + 圆角卡片 + 44px 触控输入 + 46px 主按钮 + 报销记录区横向可滑(`overflow-x:auto`)。
 - **移动导航**:底部 Tab(首页/报销/我的/AI)+ 虚拟路由 `__me`/`__payslip`,"我的"tab 在个人中心与薪资单详情间保持高亮;`go()` 拦截虚拟 nav 避免误入模块加载。
 
 ### 🧠 AI 老板驾驶舱 + AI 异常稽查(第四波 · 共享分析引擎)
@@ -296,7 +304,7 @@ pm2 logs claimgpt --nostream     # 查看日志
 - **状态**:✅ 运行中
 - **技术栈**:Python 3.13 + FastAPI + LangGraph 1.2.4 + TailwindCSS + Chart.js
 - **验证**:后端 18/18 模块 + 2集团 + 6角色 + 7国合规全绿;前端桌面+移动端零 JS 错误
-- **最后更新**:2026-06-14(五波迭代对齐 FRS:Wave1 业务流程引擎 + Wave2 薪资精度引擎(加班分级/按比例/HRDF/企业总成本) + Wave3 政府法定文件(CP39/SOCSO 8A/银行IBG/凭证分类账/LHDN审计) + ①④ AI 老板驾驶舱(实时大屏+AI解读为何涨了)+ AI 异常稽查(加班/薪资跳变/总成本突增+健康分,共享 analytics 引擎) + 员工自助门户「我的」手机端深度适配(个人中心+我的薪资单,/api/me/summary+/api/me/payslip+payslip.self_view))
+- **最后更新**:2026-06-17(六波迭代对齐 FRS:Wave1 业务流程引擎 + Wave2 薪资精度引擎(加班分级/按比例/HRDF/企业总成本) + Wave3 政府法定文件(CP39/SOCSO 8A/银行IBG/凭证分类账/LHDN审计) + ①④ AI 老板驾驶舱(实时大屏+AI解读为何涨了)+ AI 异常稽查(加班/薪资跳变/总成本突增+健康分,共享 analytics 引擎) + 员工自助门户「我的」手机端深度适配(个人中心+我的薪资单,/api/me/summary+/api/me/payslip+payslip.self_view) + 第六波:员工手机端「报销」页打通(mobileGo→my_claim、员工默认锁定马来西亚公司、全链路 RM 统一、self_claim 手机端样式优化、claim.st_posted i18n))
 
 ## 🆕 Paydaes HR-Payroll 套件(Pro 方案 · 全量铺开)
 

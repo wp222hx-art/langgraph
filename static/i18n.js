@@ -120,7 +120,7 @@ const I18N = {
       tax: '可抵扣税', recent_real: '实时报销记录(真实数据库)', refresh: '刷新',
       empty: '暂无报销记录', load_err: '加载失败', total: '合计',
       c_id: '单号', c_type: '类型', c_amount: '金额', c_risk: '风险分', c_status: '状态', c_date: '时间',
-      st_pending: '待审批', st_approved: '已批准', st_rejected: '已驳回', st_paid: '已支付',
+      st_pending: '待审批', st_approved: '已批准', st_rejected: '已驳回', st_paid: '已支付', st_posted: '已入账',
     },
     crud: {
       ops: '操作', seed: '内置', save: '保存', cancel: '取消', required: '必填',
@@ -281,7 +281,7 @@ const I18N = {
       tax: 'Deductible Tax', recent_real: 'Live Claims (Real Database)', refresh: 'Refresh',
       empty: 'No claims yet', load_err: 'Load failed', total: 'Total',
       c_id: 'ID', c_type: 'Type', c_amount: 'Amount', c_risk: 'Risk', c_status: 'Status', c_date: 'Time',
-      st_pending: 'Pending', st_approved: 'Approved', st_rejected: 'Rejected', st_paid: 'Paid',
+      st_pending: 'Pending', st_approved: 'Approved', st_rejected: 'Rejected', st_paid: 'Paid', st_posted: 'Posted',
     },
     crud: {
       ops: 'Actions', seed: 'Built-in', save: 'Save', cancel: 'Cancel', required: 'required',
