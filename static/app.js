@@ -31,7 +31,9 @@ async function boot() {
   Object.assign(S, { groups: d.groups, roles: d.roles, languages: d.languages, nav: d.nav, agents: d.agents });
   S.group = d.groups[0];
   S.company = d.groups[0].companies[0];
-  S.role = d.roles.find(r => r.id === 'sys_admin');
+  // 默认 sys_admin;支持 ?role=employee 等 URL 参数(便于直达指定身份/演示)
+  const _qpRole = new URLSearchParams(location.search).get('role');
+  S.role = (_qpRole && d.roles.find(r => r.id === _qpRole)) || d.roles.find(r => r.id === 'sys_admin');
   S.currentAgent = d.agents[0];
   // i18n:语言切换时重扫静态 DOM + 重渲染动态区(导航/当前页/智能体条)
   onLangChange(() => {
@@ -40,6 +42,7 @@ async function boot() {
     if ($('#ai-messages').dataset.init) selectAgent(S.currentAgent);
   });
   applyI18n();                    // 首次翻译静态 DOM
+  applyMode();                    // 按初始角色决定手机/桌面外壳(支持 ?role= 直达)
   renderTopbar(); renderNav(); renderAgentTabs();
   go('dashboard');
   bindGlobal();
@@ -240,6 +243,8 @@ function go(navId) {
   view.classList.remove('fade-in'); void view.offsetWidth; view.classList.add('fade-in');
   if (navId === '__me') return renderMeView();          // 移动端·我的(个人中心)
   if (navId === '__payslip') return renderMyPayslip();  // 移动端·我的薪资单
+  // 员工(手机模式)用专属轻量首页,而非管理者的桌面大屏
+  if (navId === 'dashboard' && isMobileMode()) return renderMobileHome();
   if (navId === 'dashboard') return renderDashboard();
   if (navId === 'global') return renderCompliance();
   if (navId === 'cockpit') return renderCockpit();
@@ -1298,6 +1303,90 @@ function mobileGo(nav) {
 window.mobileGo = mobileGo;
 // 金额格式(带 2 位小数,本地货币符号)
 function fmtMoney(v, cur) { return (cur || 'RM') + ' ' + Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+// ════════ 员工手机首页(轻量·非管理者大屏) ════════
+async function renderMobileHome() {
+  const c = S.company;
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? t('mh.morning') : (hour < 18 ? t('mh.afternoon') : t('mh.evening'));
+  // 骨架
+  $('#view').innerHTML = `<div class="mh-page">
+    <div class="mh-greet">
+      <div class="mh-greet-hi" id="mh-hi">${greet}</div>
+      <div class="mh-greet-sub" id="mh-sub">${c.flag} ${nameOf(c)}</div>
+    </div>
+    <div id="mh-body"><div class="me-loading"><i class="fas fa-spinner fa-spin"></i> ${t('common.loading')}</div></div>
+  </div>`;
+  try {
+    const s = await api(`/api/me/summary?role=${S.role.id}&company=${S.company.id}`);
+    if (!s || !s.ok) { $('#mh-body').innerHTML = mhActions(); return; }
+    $('#mh-hi').textContent = `${greet},${s.emp.name.split(' ')[0]}`;
+    $('#mh-sub').textContent = `${s.emp.designation} · ${s.emp.dept}`;
+    drawMobileHome(s);
+  } catch (e) { const b = $('#mh-body'); if (b) b.innerHTML = mhActions(); }
+}
+window.renderMobileHome = renderMobileHome;
+function drawMobileHome(s) {
+  const body = $('#mh-body'); if (!body) return;
+  const cur = s.balance.currency || 'RM';
+  const cs = s.claims.by_status || {};
+  body.innerHTML = `
+    <!-- 薪资速览(可点进薪资单) -->
+    <div class="mh-pay" onclick="mobileGo('__payslip')">
+      <div class="mh-pay-l">
+        <div class="mh-pay-label">${t('me.net_this_month')} · ${s.payslip.month}</div>
+        <div class="mh-pay-val">${fmtMoney(s.payslip.net_pay, cur)}</div>
+      </div>
+      <i class="fas fa-chevron-right mh-pay-arr"></i>
+    </div>
+
+    ${s.todos > 0 ? `<div class="me-todo" onclick="mobileGo('my')">
+      <i class="fas fa-bell"></i><span>${t('me.todo_prefix')} <b>${s.todos}</b> ${t('me.todo_suffix')}</span>
+      <i class="fas fa-chevron-right me-arr"></i></div>` : ''}
+
+    <!-- 快捷操作四宫格 -->
+    <div class="mh-actions">
+      <div class="mh-act" onclick="openAI('ClaimMate','我要拍照报销')">
+        <div class="mh-act-ico" style="background:#ecfdf5;color:#059669"><i class="fas fa-camera"></i></div>
+        <span>${t('mh.act_photo')}</span></div>
+      <div class="mh-act" onclick="mobileGo('my')">
+        <div class="mh-act-ico" style="background:#eff6ff;color:#2563eb"><i class="fas fa-receipt"></i></div>
+        <span>${t('mh.act_claim')}</span></div>
+      <div class="mh-act" onclick="mobileGo('__payslip')">
+        <div class="mh-act-ico" style="background:#fffbeb;color:#d97706"><i class="fas fa-file-invoice-dollar"></i></div>
+        <span>${t('me.my_payslip')}</span></div>
+      <div class="mh-act" onclick="openAI('ClaimMate','帮我登记家属信息')">
+        <div class="mh-act-ico" style="background:#eef2ff;color:#6366f1"><i class="fas fa-users"></i></div>
+        <span>${t('m.me_family')}</span></div>
+    </div>
+
+    <!-- 我的报销近况 -->
+    <div class="mh-card">
+      <div class="mh-card-title"><i class="fas fa-chart-simple text-teal-500"></i> ${t('mh.claim_status')}</div>
+      <div class="me-stats" style="margin:0">
+        <div class="me-stat" onclick="mobileGo('my')"><div class="me-stat-n">${cs.pending || 0}</div><div class="me-stat-l">${t('me.st_pending')}</div></div>
+        <div class="me-stat" onclick="mobileGo('my')"><div class="me-stat-n text-emerald-500">${cs.approved || 0}</div><div class="me-stat-l">${t('me.st_approved')}</div></div>
+        <div class="me-stat" onclick="mobileGo('my')"><div class="me-stat-n text-sky-500">${cs.paid || 0}</div><div class="me-stat-l">${t('me.st_paid')}</div></div>
+        <div class="me-stat" onclick="mobileGo('my')"><div class="me-stat-n text-rose-400">${cs.rejected || 0}</div><div class="me-stat-l">${t('me.st_rejected')}</div></div>
+      </div>
+    </div>
+
+    <!-- 年度额度 -->
+    <div class="me-quota" style="margin-bottom:0">
+      <div class="me-quota-head"><span><i class="fas fa-wallet text-emerald-500"></i> ${t('me.annual_quota')}</span>
+        <span class="me-quota-rem">${fmtMoney(s.balance.remaining, cur)}</span></div>
+      <div class="me-quota-bar"><div class="me-quota-fill" style="width:${s.balance.annual ? Math.min(100, s.balance.used / s.balance.annual * 100) : 0}%"></div></div>
+      <div class="me-quota-foot">${t('claim.used')} ${fmtMoney(s.balance.used, cur)} / ${fmtMoney(s.balance.annual, cur)}</div>
+    </div>`;
+}
+function mhActions() {
+  return `<div class="mh-actions">
+      <div class="mh-act" onclick="openAI('ClaimMate','我要拍照报销')"><div class="mh-act-ico" style="background:#ecfdf5;color:#059669"><i class="fas fa-camera"></i></div><span>${t('mh.act_photo')}</span></div>
+      <div class="mh-act" onclick="mobileGo('my')"><div class="mh-act-ico" style="background:#eff6ff;color:#2563eb"><i class="fas fa-receipt"></i></div><span>${t('mh.act_claim')}</span></div>
+      <div class="mh-act" onclick="mobileGo('__payslip')"><div class="mh-act-ico" style="background:#fffbeb;color:#d97706"><i class="fas fa-file-invoice-dollar"></i></div><span>${t('me.my_payslip')}</span></div>
+      <div class="mh-act" onclick="$('#role-switch').click()"><div class="mh-act-ico" style="background:#f1f5f9;color:#64748b"><i class="fas fa-right-left"></i></div><span>${t('m.me_switch')}</span></div>
+    </div>`;
+}
 
 // 「我的」页(移动端个人中心)—— 真数据驱动:薪资卡 + 报销进度 + 待办 + 快捷入口
 async function renderMeView() {

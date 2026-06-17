@@ -26,6 +26,10 @@ const I18N = {
       gross_total: '应发合计', total_deduction: '扣除合计',
       payslip_note: '薪资数据仅本人可见 · 由 Paydaes 薪资引擎实时计算(EPF/SOCSO/EIS/PCB 已依马来西亚法定标准核算)',
     },
+    mh: {
+      morning: '早上好', afternoon: '下午好', evening: '晚上好',
+      act_photo: '拍照报销', act_claim: '我的报销', claim_status: '我的报销近况',
+    },
     topbar: {
       global: '全球合规', notifications: '通知', ai_assistant: 'AI 助手',
       switch_company: '切换公司', switch_role: '切换角色', switch_lang: '切换语言',
@@ -186,6 +190,10 @@ const I18N = {
       back: 'Back', payslip_title: 'Payslip', net_pay: 'Net Pay', earnings: 'Earnings', deductions: 'Deductions',
       gross_total: 'Gross Total', total_deduction: 'Total Deduction',
       payslip_note: 'Payslip is private to you · Computed live by Paydaes payroll engine (EPF/SOCSO/EIS/PCB per Malaysia statutory rules)',
+    },
+    mh: {
+      morning: 'Good morning', afternoon: 'Good afternoon', evening: 'Good evening',
+      act_photo: 'Snap Claim', act_claim: 'My Claims', claim_status: 'My Claim Status',
     },
     topbar: {
       global: 'Global Compliance', notifications: 'Notifications', ai_assistant: 'AI Assistant',

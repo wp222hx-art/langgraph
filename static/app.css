@@ -412,6 +412,22 @@ body.mode-mobile #topbar{
 }
 body.mode-mobile #topbar *{ color:#fff !important; }
 
+/* 手机顶栏精简:只留 Logo + 角色 + AI,隐藏拥挤的公司/合规/语言/帮助/通知 */
+body.mode-mobile #topbar{ gap:8px !important; padding:0 14px !important; }
+body.mode-mobile #menu-toggle,
+body.mode-mobile #company-switch,
+body.mode-mobile #global-btn,
+body.mode-mobile #lang-switch,
+body.mode-mobile #help-btn{ display:none !important; }
+body.mode-mobile #group-name{ display:block !important; font-size:15px; }
+body.mode-mobile #role-name{ display:block !important; }
+body.mode-mobile #role-switch{ background:rgba(255,255,255,.16); border-radius:20px; padding:0 10px 0 4px; }
+body.mode-mobile #role-switch #role-name{ font-size:13px; }
+body.mode-mobile #role-switch .fa-chevron-down{ display:inline-block !important; }
+body.mode-mobile #ai-toggle{ background:rgba(255,255,255,.2) !important; }
+body.mode-mobile #ai-toggle span{ display:none; }
+body.mode-mobile #topbar .flex-1{ flex:1; }
+
 body.mode-mobile #workspace{
   top:56px; bottom:0;
   background:#f1f5f9;
@@ -638,3 +654,36 @@ body.mode-mobile .chart-box{ height:220px; }
 .ps-neg { color:#e11d48; }
 .ps-total { border-top:2px solid #f1f5f9; border-bottom:none; margin-top:4px; padding-top:10px; font-weight:700; color:#0f172a; }
 .ps-note { font-size:11px; color:#94a3b8; line-height:1.6; padding:4px 18px 0; text-align:center; }
+
+/* ════════ 员工手机首页(轻量) ════════ */
+.mh-page { animation:fade-in .2s ease; }
+.mh-greet {
+  background:linear-gradient(135deg,#0d9488,#0891b2);
+  margin:-14px -14px 0; padding:22px 18px 40px;
+  border-radius:0 0 22px 22px; color:#fff;
+}
+.mh-greet-hi { font-size:21px; font-weight:800; letter-spacing:-.3px; }
+.mh-greet-sub { font-size:13px; opacity:.9; margin-top:4px; }
+#mh-body { padding-bottom:10px; }
+
+/* 薪资速览条(浮在欢迎区下) */
+.mh-pay {
+  margin:-26px 4px 14px; padding:16px 18px; border-radius:16px; background:#fff;
+  box-shadow:0 8px 22px -10px rgba(13,148,136,.4);
+  display:flex; align-items:center; justify-content:space-between; cursor:pointer;
+}
+.mh-pay:active { transform:scale(.985); }
+.mh-pay-label { font-size:12px; color:#94a3b8; }
+.mh-pay-val { font-size:26px; font-weight:800; color:#0d9488; letter-spacing:-.5px; margin-top:2px; }
+.mh-pay-arr { color:#cbd5e1; font-size:15px; }
+
+/* 快捷操作四宫格 */
+.mh-actions { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:0 0 14px; }
+.mh-act { background:#fff; border-radius:14px; padding:13px 4px; text-align:center; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+.mh-act:active { transform:scale(.94); }
+.mh-act-ico { width:42px; height:42px; border-radius:13px; margin:0 auto 7px; display:flex; align-items:center; justify-content:center; font-size:18px; }
+.mh-act span { font-size:11.5px; color:#475569; display:block; line-height:1.2; }
+
+/* 通用卡片(报销近况) */
+.mh-card { background:#fff; border-radius:14px; padding:14px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+.mh-card-title { font-size:13px; font-weight:700; color:#334155; margin-bottom:11px; display:flex; align-items:center; gap:7px; }

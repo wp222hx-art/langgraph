@@ -675,6 +675,9 @@ def me_summary(role: str = "employee", company: str = "my", emp_no: str | None =
     if not permissions.can(role, "claim.self_view"):
         return permissions.deny_payload(role, "claim.self_view")
     from app.data import payroll_data as P
+    # 演示员工为马来西亚薪资名单(MY00x),其薪资/额度货币统一锁定 MYR,
+    # 避免与顶栏登录公司(可能新加坡 SGD)货币不一致造成混淆。
+    company = "my"
     e = _self_employee(emp_no)
     m = P.compute_monthly(e)
     # 真实报销库统计(按公司,演示员工无独立 emp_id 时取全公司聚合作为"我的")
@@ -693,7 +696,7 @@ def me_summary(role: str = "employee", company: str = "my", emp_no: str | None =
         "payslip": {"net_pay": m["net_pay"], "gross_total": m["gross_total"],
                     "total_deduction": m["total_deduction"], "month": "2026-05"},
         "balance": {"annual": bal.get("annual", 0), "used": bal.get("used", 0),
-                    "remaining": bal.get("remaining", 0), "currency": bal.get("currency", "MYR")},
+                    "remaining": bal.get("remaining", 0), "currency": "RM"},
         "claims": {"total": len(my_claims), "by_status": by_status},
         "todos": pending,
         "family_count": len(db.get_family(db_emp_id, company)),
