@@ -388,3 +388,31 @@ pm2 logs claimgpt --nostream     # 查看日志
 - Overtime → 「AI 异常检测」
 - EA Setting → 「AI 自动归集」
 - COA → 「AI 科目映射」
+
+---
+
+## 🌀 第十波 · 代码冗余清理 + 前端混淆加固 (2026-06-17)
+
+### 冗余清理
+- 删除未使用导入 ×4(`mock_db`/`Any`/`datetime`/`re`)
+- 删除未使用局部变量 ×6(`head_fill`/`tax`/`cc`/`country`/`annual_basic`/`text`)
+- 过时验收报告 `SYSTEM_REPORT.md` 归档至 `docs/archive/`
+- pyflakes 全量扫描:冗余清零 ✅
+
+### 前端混淆加固(防逆向)
+- **可读源码**:保留在 `static/src/*.js`(仅仓库,不发布)
+- **混淆产物**:输出到 `static/*.js`(浏览器实际加载)
+- **流水线**:`node obfuscate.cjs`(terser 压缩 → javascript-obfuscator 混淆)
+- **混淆手段**:标识符乱码化、字符串数组 Base64/RC4 编码、控制流扁平化、死代码注入、反调试、自我保护
+- **缓存版本**:`?v=20260614k`
+
+> ⚠️ 安全说明:Web 前端 JS 必须下载到浏览器才能运行,故**无法做到绝对不可逆**。
+> 真正的机密(薪资算法/合规规则/Agent 编排)全部在 Python 后端,浏览器永不可见。
+> 前端混淆的目标是把逆向成本拉到极高,劝退山寨者——这是行业实战级防护策略。
+
+### 重新混淆命令
+```bash
+# 修改 static/src/ 下的源码后,运行:
+node obfuscate.cjs
+# 然后更新 index.html 的 ?v= 缓存版本号,重启 PM2
+```

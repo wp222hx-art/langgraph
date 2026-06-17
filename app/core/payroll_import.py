@@ -68,7 +68,6 @@ def build_template() -> dict:
     ws0.title = "说明 Instructions"
     title_f = Font(bold=True, size=14, color="1F4E78")
     head_f = Font(bold=True, size=11, color="FFFFFF")
-    head_fill = PatternFill("solid", fgColor="2E5395")
     ws0["A1"] = "员工薪资名单导入模板 · Employee Payroll Import Template"
     ws0["A1"].font = title_f
     ws0["A2"] = "Paydaes ClaimGPT · 合规报表中心 (Payslip / EPF Borang A / EA Form 数据源)"

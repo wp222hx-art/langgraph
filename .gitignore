@@ -18,3 +18,4 @@ claimgpt.db
 claimgpt.db-wal
 claimgpt.db-shm
 exports/
+verify_obf.py

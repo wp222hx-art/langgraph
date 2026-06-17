@@ -1,0 +1,19 @@
+{
+  "name": "claimgpt",
+  "version": "1.0.0",
+  "description": "> \"不再是一个让你填表的系统,而是一群替你思考的智能体。\"",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "javascript-obfuscator": "^5.4.3",
+    "terser": "^5.48.0"
+  }
+}

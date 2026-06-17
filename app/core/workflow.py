@@ -23,7 +23,6 @@
 """
 from __future__ import annotations
 from datetime import date, datetime
-from typing import Any
 
 # ════════════════ 审批定义 (内置默认配置, 可被租户覆盖) ════════════════
 # 文档: 模块 ∈ {请假 | 加班 | 报销 | 费用}; 条件路由按金额/天数阈值升级级别

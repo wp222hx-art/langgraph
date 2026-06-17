@@ -226,7 +226,6 @@ def compute_annual(emp: dict) -> dict:
     m = compute_monthly(emp)
     months = 12
     bonus = emp.get("bonus", 0)
-    annual_basic = m["gross_taxable"] * months - emp.get("ot", 0) * months  # 仅基本+固定津贴部分
     annual_gross_13_1 = round((emp["basic"] + emp.get("allow_fixed", 0)) * months + emp.get("ot", 0) * months + bonus, 2)
     return {
         **emp,

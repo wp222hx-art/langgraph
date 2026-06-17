@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from app.core.orchestrator import run_turn
 from app.core import llm_gateway, permissions, telemetry
-from app.data import enterprise, navigation, mock_db, paydaes_modules, db, calc
+from app.data import enterprise, navigation, paydaes_modules, db, calc
 
 app = FastAPI(title="Paydaes ClaimGPT", version="3.0")
 

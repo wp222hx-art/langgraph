@@ -195,7 +195,6 @@ def hr_strategist(state: dict) -> dict[str, Any]:
 # 模块: ⑪报销接口流程 ⑬审核接口数据 ④汇率
 # ═══════════════════════════════════════════════
 def payroll_navigator(state: dict) -> dict[str, Any]:
-    text = state["user_input"]
     module = state.get("module", "报销接口流程")
     think, cards = [], []
 

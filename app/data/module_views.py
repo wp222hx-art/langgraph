@@ -9,15 +9,12 @@ from app.data import mock_db, enterprise, db
 
 
 def get_module_view(module_id: str, company: str = "sg") -> dict:
-    cc = enterprise.COUNTRIES
     company_info = None
     for g in enterprise.GROUPS:
         for c in g["companies"]:
             if c["id"] == company:
                 company_info = c
     cur = company_info["currency"] if company_info else "SGD"
-    country = company_info["country"] if company_info else "SG"
-    tax = cc.get(country, cc["SG"])["tax"]
 
     V = {
         # ── 设置 > 基础表 ──

@@ -6,7 +6,6 @@ MVP 阶段用规则 + Mock 实现,阶段二可平滑替换为真实 LLM 调用�
 """
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from app.data import mock_db, db, calc
