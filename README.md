@@ -10,7 +10,17 @@
 
 ## ✅ 已完成功能
 
-### 🔗 Company Code 全域联动 + 公式查询体系(最新 · 第十一波)
+### 💸 公式引擎接真实薪资批算 · 公式驱动每张工资单(最新 · 第十二波)
+把公式引擎从"单条规则计算器"升级为**批量发薪管线的真实驱动核心**——让用户在公式编辑器里配的规则,真正决定每个员工工资单上的数字:
+- **新建批算管线 `app/core/payroll_batch.py`**:遍历公司员工 → 逐人把 HR 维度(性别/婚姻/司龄/职级/加班时数)映射成公式变量空间 → 读取该公司落库公式 → `formula_engine.evaluate` 求值 → 驱动「应享假期天数」与「加班费」→ 再走成熟的法定扣除引擎(EPF/SOCSO/EIS/PCB/Zakat/HRDF)→ 出工资单。
+- **公式真正改变工资单**:实测 —— 配置司龄阶梯公式后,MY001(12年)应享天数 `14→18`、MY002(7年)`→16`、MY003(3年)`→14`;配置加班公式后加班费由 `1050.48→913.46`,**净薪同步联动变化**。无公式时优雅回退到默认天数/分级费率。
+- **公式溯源(formula_trace)**:每张工资单都记录"用了哪条公式 / 喂了哪些变量(SERVICE.YEARS=12, ENTITLEMENT.DAYS=14)/ 算出什么值",前端点「溯源」图标弹层查看,实现「公式 → 工资单」的**可解释闭环**。
+- **员工花名册扩展**:`PAYROLL_EMPLOYEES` 5 名员工新增 `gender/service_years/grade/base_entitlement` 维度,有区分度,体现公式驱动效果。
+- **前端入口**:报销接口流程(payroll_if)等 flow 页新增「公式驱动批量发薪」按钮,一键跑批 → 工资单表格(工号/姓名/职级/基本/加班/应享天数/应发/扣除/实发)+ 公式状态徽章(已驱动/默认)+ 逐人溯源。中英双语。
+- **API**:`GET /api/payroll/run?company=&period=&role=`(批算摘要)、`GET /api/payroll/payslip/{emp_no}?company=`(单员工完整工资单+溯源),均需 `payroll.run` 权限。
+- Playwright E2E 全绿(默认 5 行工资单;配公式后 12年→18天/公式徽章"已驱动"/溯源弹层结果→18;0 JS 错误)。
+
+### 🔗 Company Code 全域联动 + 公式查询体系(第十一波)
 把"写死值"彻底消灭,并把公式编辑器升级为**可查询的帮助系统**:
 - **Company Code 随公司联动**:此前所有模块的 `Company Code` 硬编码为 `COM01/COM05`,现在改为读取所选公司的真实公司代码(`PDS-SG / PDS-MY / PDS-TH / PDS-VN / PDS-ID / HZN-HK / HZN-CN`)。班次/排班组/假日表/加班/会计科目表的公司代码、假期权益的国家代码(`SG/MY/...`)、打卡地点与银行的国家全名(`Singapore/Malaysia/...`)全部随公司切换实时变化。
 - **企业数据层补全**:`enterprise.py` 7 家公司新增 `code` 字段;`get_paydaes_module()` 与各域模块函数(`_leave/_ta/_acc/_master_modules`)接收 `code`/`country` 参数动态注入。

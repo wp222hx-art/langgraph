@@ -469,9 +469,90 @@ function flowView(m) {
       ${m.rollback ? '<span class="badge b-mid"><i class="fas fa-rotate-left"></i> 支持回滚</span>' : ''}
       <span class="text-slate-400 text-xs ml-auto"><i class="fas fa-shield-halved text-emerald-400"></i> LangGraph Checkpoint 断点续跑保护</span></div>
     ${steps}
-    <div class="flex gap-2 mt-3"><button class="btn btn-ai" onclick="openAI('PayrollNavigator','执行薪资跑批')"><i class="fas fa-robot"></i> AI 自主跑批</button>
-      ${m.rollback ? '<button class="btn btn-ghost"><i class="fas fa-rotate-left"></i> 回滚批次</button>' : ''}</div></div>`;
+    <div class="flex gap-2 mt-3 flex-wrap"><button class="btn btn-ai" onclick="openAI('PayrollNavigator','执行薪资跑批')"><i class="fas fa-robot"></i> ${S.lang === 'en' ? 'AI Auto Run' : 'AI 自主跑批'}</button>
+      <button class="btn btn-primary" style="background:#0f766e" onclick="runFormulaPayroll(this)"><i class="fas fa-calculator"></i> ${S.lang === 'en' ? 'Formula-Driven Payroll' : '公式驱动批量发薪'}</button>
+      ${m.rollback ? `<button class="btn btn-ghost"><i class="fas fa-rotate-left"></i> ${S.lang === 'en' ? 'Rollback' : '回滚批次'}</button>` : ''}</div>
+    <div id="fp-result" class="mt-4"></div></div>`;
 }
+
+// 公式驱动批量发薪 —— 调真实批算管线, 展示工资单 + 公式溯源
+async function runFormulaPayroll(btn) {
+  const box = document.getElementById('fp-result');
+  if (!box) return;
+  const en = S.lang === 'en';
+  const old = btn.innerHTML; btn.disabled = true;
+  btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${en ? 'Running…' : '跑批中…'}`;
+  try {
+    let company = (typeof effCompany === 'function' ? effCompany() : (S.company && S.company.id)) || 'my';
+    if (company === 'group' || !company) company = 'my';  // 集团视图回退到演示主体
+    const r = await api(`/api/payroll/run?company=${company}&role=${S.role ? S.role.id : 'payroll'}`, null, 'GET');
+    if (r.error || r.denied) { box.innerHTML = `<div class="fp-err"><i class="fas fa-lock"></i> ${esc(r.error || (en ? 'No permission' : '权限不足'))}</div>`; return; }
+    const tot = r.totals || {};
+    const fxNote = `<div class="fp-fxbar">
+      <span class="fp-fxchip ${r.formulas.leave_active ? 'on' : 'off'}"><i class="fas fa-umbrella-beach"></i> ${en ? 'Leave formula' : '假期公式'}: ${r.formulas.leave_active ? (en ? 'ACTIVE' : '已驱动') : (en ? 'default' : '默认')}</span>
+      <span class="fp-fxchip ${r.formulas.ot_active ? 'on' : 'off'}"><i class="fas fa-business-time"></i> ${en ? 'OT formula' : '加班公式'}: ${r.formulas.ot_active ? (en ? 'ACTIVE' : '已驱动') : (en ? 'default' : '默认')}</span>
+    </div>`;
+    const rows = (r.rows || []).map(p => {
+      const traceOk = (p.formula_trace || []).filter(t => t.ok).length;
+      const traceBtn = (p.formula_trace && p.formula_trace.length)
+        ? `<button class="fp-trace-btn" onclick='fpShowTrace(${JSON.stringify(JSON.stringify(p.formula_trace))})' title="${en ? 'Formula trace' : '公式溯源'}"><i class="fas fa-diagram-project"></i> ${traceOk}</button>` : '—';
+      return `<tr>
+        <td>${esc(p.emp_no)}</td><td>${esc(p.name)}</td><td>${esc(p.grade || '')}</td>
+        <td class="num">${fmtMoney(p.basic_pay)}</td>
+        <td class="num">${fmtMoney(p.ot_amount)}</td>
+        <td class="num"><b>${p.entitlement_days}</b></td>
+        <td class="num">${fmtMoney(p.gross_total)}</td>
+        <td class="num fp-ded">-${fmtMoney(p.total_deduction)}</td>
+        <td class="num fp-net">${fmtMoney(p.net_pay)}</td>
+        <td class="center">${traceBtn}</td></tr>`;
+    }).join('');
+    box.innerHTML = `${fxNote}
+      <div class="fp-tablewrap"><table class="fp-table">
+        <thead><tr>
+          <th>${en ? 'No.' : '工号'}</th><th>${en ? 'Name' : '姓名'}</th><th>${en ? 'Grade' : '职级'}</th>
+          <th class="num">${en ? 'Basic' : '基本'}</th><th class="num">${en ? 'OT' : '加班'}</th>
+          <th class="num">${en ? 'Leave Days' : '应享天数'}</th><th class="num">${en ? 'Gross' : '应发'}</th>
+          <th class="num">${en ? 'Deduction' : '扣除'}</th><th class="num">${en ? 'Net Pay' : '实发'}</th>
+          <th class="center">${en ? 'Trace' : '溯源'}</th>
+        </tr></thead><tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="6">${en ? 'TOTAL' : '合计'} · ${r.count} ${en ? 'employees' : '人'}</td>
+          <td class="num">${fmtMoney(tot.gross_total)}</td><td class="num fp-ded">-${fmtMoney(tot.total_deduction || (tot.gross_total - tot.net_pay))}</td>
+          <td class="num fp-net">${fmtMoney(tot.net_pay)}</td><td></td></tr></tfoot>
+      </table></div>
+      <p class="fp-hint"><i class="fas fa-circle-info"></i> ${en ? 'Leave days & OT driven by formulas saved in Leave Entitlement / Overtime modules. Click trace to see variables.' : '应享天数 / 加班费由「假期权益 / 加班设置」模块里保存的公式实时驱动。点溯源图标看变量来源。'}</p>`;
+  } catch (e) {
+    box.innerHTML = `<div class="fp-err"><i class="fas fa-triangle-exclamation"></i> ${esc(String(e))}</div>`;
+  } finally { btn.disabled = false; btn.innerHTML = old; }
+}
+window.runFormulaPayroll = runFormulaPayroll;
+
+function fmtMoney(v) {
+  const n = Number(v || 0);
+  return n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// 公式溯源弹层
+function fpShowTrace(traceJson) {
+  let trace = [];
+  try { trace = JSON.parse(traceJson); } catch (e) { return; }
+  const en = S.lang === 'en';
+  const items = trace.map(t => {
+    const vars = Object.entries(t.used_vars || {}).map(([k, v]) => `<span class="fp-var"><code>${esc(k)}</code>=${esc(String(v))}</span>`).join('');
+    return `<div class="fp-trace-card ${t.ok ? '' : 'bad'}">
+      <div class="fp-trace-h"><span class="fp-trace-badge">${esc(t.label || t.driver)}</span>
+        ${t.ok ? `<span class="fp-trace-res">→ ${esc(String(t.result))}</span>` : `<span class="fp-trace-err">${esc(t.error || 'error')}</span>`}</div>
+      <pre class="fp-trace-code">${esc(t.formula)}</pre>
+      <div class="fp-trace-vars">${vars || (en ? '(no variables)' : '(无变量)')}</div></div>`;
+  }).join('');
+  const html = `<div id="fp-trace-mask" class="fxhelp-mask" onclick="if(event.target===this)fpTraceClose()">
+    <div class="fxhelp-panel" style="width:min(560px,94vw)">
+      <div class="fxhelp-head"><div class="fxhelp-title"><i class="fas fa-diagram-project"></i> ${en ? 'Formula Trace' : '公式溯源'}</div>
+        <button class="fxhelp-x" onclick="fpTraceClose()"><i class="fas fa-times"></i></button></div>
+      <div class="fxhelp-body">${items}</div></div></div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+function fpTraceClose() { const m = document.getElementById('fp-trace-mask'); if (m) m.remove(); }
+window.fpShowTrace = fpShowTrace; window.fpTraceClose = fpTraceClose;
 
 function reportView(m) {
   // 导出权限:hr_admin / payroll / finance / sys_admin

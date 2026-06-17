@@ -109,7 +109,8 @@ def _emp(emp_no, name, ic_no, epf_no, socso_no, designation, dept, basic,
          marital="single", spouse_income=True, children=0, children_tertiary=0,
          zakat_monthly=0.0, tp1_relief=0.0, ot_hours=None,
          worked_days=None, month_days=None, hrdf=True, bank_code="", bank_acct="",
-         tax_no="", bonus_month=0, commission=0):
+         tax_no="", bonus_month=0, commission=0,
+         gender="M", service_years=3, grade="P5", base_entitlement=14):
     return dict(emp_no=emp_no, name=name, ic_no=ic_no, epf_no=epf_no, socso_no=socso_no,
                 designation=designation, dept=dept, basic=basic, allow_fixed=allow_fixed,
                 allow_taxexempt=allow_taxexempt, bonus=bonus, ot=ot, marital=marital,
@@ -117,36 +118,44 @@ def _emp(emp_no, name, ic_no, epf_no, socso_no, designation, dept, basic,
                 zakat_monthly=zakat_monthly, tp1_relief=tp1_relief, ot_hours=ot_hours,
                 worked_days=worked_days, month_days=month_days, hrdf=hrdf,
                 bank_code=bank_code, bank_acct=bank_acct, tax_no=tax_no,
-                bonus_month=bonus_month, commission=commission)
+                bonus_month=bonus_month, commission=commission,
+                # ── 公式引擎可用的 HR 维度变量(驱动应享天数/加班倍率) ──
+                gender=gender, service_years=service_years, grade=grade,
+                base_entitlement=base_entitlement)
 
 PAYROLL_EMPLOYEES = [
     _emp("MY001", "Ahmad Bin Ismail",  "880512-14-5523", "12345601", "880512145523",
          "Engineering Manager", "Technology", 9500, 1200, 500, 19000,
          marital="married", spouse_income=False, children=2, zakat_monthly=150,
          ot_hours={"normal": 10, "rest": 4}, bank_code="MBB", bank_acct="514012345678",
-         tax_no="SG10234567"),
+         tax_no="SG10234567",
+         gender="M", service_years=12, grade="P7", base_entitlement=14),
     _emp("MY002", "Tan Mei Ling",      "910823-10-2241", "12345602", "910823102241",
          "Senior Accountant", "Finance", 6800, 800, 500, 13600,
          marital="married", spouse_income=True, children=1,
          ot_hours={"normal": 6}, bank_code="CIMB", bank_acct="800123456789",
-         tax_no="SG20345678"),
+         tax_no="SG20345678",
+         gender="F", service_years=7, grade="P6", base_entitlement=14),
     _emp("MY003", "Ruby Rose A/P Raj", "950114-08-5566", "12345603", "950114085566",
          "HR Executive", "Human Resources", 4500, 500, 300, 4500,
          marital="single", children=0,
          ot_hours={"normal": 8, "holiday": 5}, bank_code="PBB", bank_acct="312045678901",
-         tax_no="SG30456789"),
+         tax_no="SG30456789",
+         gender="F", service_years=3, grade="P5", base_entitlement=14),
     # MY004: 离职月示例 —— 本月在职 18/30 天,基本工资按比例
     _emp("MY004", "John Lim Wei Jie",  "970328-14-7789", "12345604", "970328147789",
          "Sales Executive", "Sales", 3800, 400, 300, 3800,
          marital="married", spouse_income=True, children=1, children_tertiary=1,
          ot_hours={"normal": 12, "rest": 6}, worked_days=18, month_days=30,
-         commission=500, bank_code="RHB", bank_acct="214098765432", tax_no="SG40567890"),
+         commission=500, bank_code="RHB", bank_acct="214098765432", tax_no="SG40567890",
+         gender="M", service_years=1, grade="P4", base_entitlement=12),
     # MY005: 加班严重超标示例 —— 触发 critical 稽查(80h > 72h 严重阈值)
     _emp("MY005", "Siti Nurhaliza",    "930707-05-3312", "12345605", "930707053312",
          "Admin Assistant", "Operations", 2900, 200, 200, 2900,
          marital="single", children=0,
          ot_hours={"normal": 60, "rest": 12, "holiday": 8}, bank_code="MBB", bank_acct="514099887766",
-         tax_no="SG50678901"),
+         tax_no="SG50678901",
+         gender="F", service_years=5, grade="P3", base_entitlement=12),
 ]
 
 

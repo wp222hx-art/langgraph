@@ -508,6 +508,32 @@ def list_batches(company: str = "sg"):
     return {"batches": db.list_batches(company)}
 
 
+@app.get("/api/payroll/run")
+def payroll_run(company: str = "my", period: str = "", role: str = "payroll"):
+    """公式驱动批量发薪(摘要)—— 读取该公司落库公式,逐人算应享天数/加班费 → 工资单。
+    需 payroll.run 权限。"""
+    if not permissions.can(role, "payroll.run"):
+        return permissions.deny_payload(role, "payroll.run")
+    from app.core import payroll_batch
+    return payroll_batch.batch_summary(company, period or datetime.now().strftime("%Y-%m"))
+
+
+@app.get("/api/payroll/payslip/{emp_no}")
+def payroll_payslip(emp_no: str, company: str = "my", role: str = "payroll"):
+    """单员工完整工资单 + 公式溯源。需 payroll.run 权限。"""
+    if not permissions.can(role, "payroll.run"):
+        return permissions.deny_payload(role, "payroll.run")
+    from app.core import payroll_batch
+    from app.data import payroll_data
+    emp = next((e for e in payroll_data.PAYROLL_EMPLOYEES if e["emp_no"] == emp_no), None)
+    if not emp:
+        return {"ok": False, "error": f"员工 {emp_no} 不存在"}
+    leave_f = payroll_batch._get_company_formula("leave_entitlement", company)
+    ot_f = payroll_batch._get_company_formula("overtime", company)
+    ps = payroll_batch.compute_employee_pay(emp, company, leave_f, ot_f)
+    return {"ok": True, "payslip": ps}
+
+
 @app.get("/api/balance")
 def balance(company: str = "sg", emp_id: str | None = None):
     return db.get_balance(emp_id, company)
