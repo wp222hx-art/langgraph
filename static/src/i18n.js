@@ -105,6 +105,10 @@ const I18N = {
       confirm: '确认', cancel: '取消', yes: '是', no: '否',
       high: '高', mid: '中', low: '低',
       passed: '✅ 通过', risk_level: '风险等级', check: '校验',
+      saving: '保存中', saved: '已保存', save_ok: '配置已保存(演示)',
+      no_data: '无匹配数据', open: '打开', empty: '(空)', remove: '移除',
+      pick_first: '请先选中一项', tab_empty: '该分组暂无更多配置项',
+      page: '第', page_unit: '页',
     },
     table: {
       no: '单号', applicant: '申请人', type: '类型', amount: '金额',
@@ -271,6 +275,10 @@ const I18N = {
       confirm: 'Confirm', cancel: 'Cancel', yes: 'Yes', no: 'No',
       high: 'High', mid: 'Medium', low: 'Low',
       passed: '✅ Passed', risk_level: 'Risk Level', check: 'Validation',
+      saving: 'Saving', saved: 'Saved', save_ok: 'Configuration saved (demo)',
+      no_data: 'No matching data', open: 'Open', empty: '(empty)', remove: 'Remove',
+      pick_first: 'Please select an item first', tab_empty: 'No more settings in this group',
+      page: 'Page', page_unit: '',
     },
     table: {
       no: 'No.', applicant: 'Applicant', type: 'Type', amount: 'Amount',
