@@ -2195,218 +2195,379 @@ window.acBindProvChange = acBindProvChange; window.acSaveBinding = acSaveBinding
 
 // ════════════════════════════════════════════════════════════
 //  系统架构图谱 + 完整说明书(点击左上角集团 Logo 进入)
+//  —— 中英双语并排 · 功能精确详解 ——
 // ════════════════════════════════════════════════════════════
-function renderArchitecture() {
-  const en = S.lang === 'en';
-  const T = (zh, eng) => en ? eng : zh;
 
-  // ── 分层架构数据 ──
+// 双语并排行:中文在上、英文在下(始终同屏对照)
+function biRow(zh, en) {
+  return `<div class="bi-row"><div class="bi-zh">${zh}</div><div class="bi-en">${en}</div></div>`;
+}
+// 双语标题(用于区块 h2)
+function biH2(icon, zh, en) {
+  return `<h2 class="arch-h2"><i class="fas ${icon}"></i><span class="bi-h2-zh">${zh}</span><span class="bi-h2-en">${en}</span></h2>`;
+}
+// 双语小标签(中 / English 同行)
+function biH2cap(zh, en) {
+  return `<span class="bi-cap"><i class="fas fa-bolt"></i> ${zh} <em>/ ${en}</em></span>`;
+}
+
+function renderArchitecture() {
+  const G = S.group ? S.group : { logo: 'P', color: '#20c997' };
+
+  // ════ 1. 五层架构(双语并排) ════
   const layers = [
-    { key: 'L1', icon: 'fa-display', color: '#0ea5e9',
-      title: T('① 体验层 · Experience', '① Experience Layer'),
-      sub: T('多端自适应 · 角色化界面 · 对话式交互', 'Adaptive multi-device · Role UI · Conversational UX'),
+    { icon: 'fa-display', color: '#0ea5e9',
+      zh: '① 体验层', en: 'Experience Layer',
+      subzh: '多端自适应 · 角色化界面 · 对话式交互', suben: 'Adaptive multi-device · Role-based UI · Conversational UX',
       items: [
-        T('管理者桌面驾驶舱（KPI 大屏 / 图表 / 待办）', 'Manager desktop cockpit (KPI / charts / todos)'),
-        T('员工手机端自助门户（薪资单 / 报销 / 个人中心）', 'Employee mobile self-portal (payslip / claim / me)'),
-        T('AI 助手抽屉（对话 + 拍照识别 + 卡片）', 'AI assistant drawer (chat + photo OCR + cards)'),
-        T('双语 i18n（中 / 英）· 双视口零溢出', 'Bilingual i18n (zh/en) · zero-overflow viewport'),
+        ['管理者桌面驾驶舱:KPI 大屏、趋势图表、待办派发,一屏掌握经营全局', 'Manager desktop cockpit: KPI wall, trend charts, todo dispatch — run the whole business at a glance'],
+        ['员工手机端自助门户:本月薪资、年度报销额度、报销进度、个人中心', 'Employee mobile self-portal: monthly payslip, annual claim quota, claim status, profile center'],
+        ['AI 助手抽屉:自然语言对话 + 拍照识别 + 结构化结果卡片', 'AI assistant drawer: natural-language chat + photo OCR + structured result cards'],
+        ['全站中英双语 i18n,手机/平板/桌面三视口零溢出自适应', 'Full bilingual i18n (zh/en), zero-overflow across mobile / tablet / desktop'],
       ] },
-    { key: 'L2', icon: 'fa-diagram-project', color: '#14b8a6',
-      title: T('② 编排层 · Orchestration', '② Orchestration Layer'),
-      sub: T('LangGraph 状态机 · 意图路由 · 人机协同(HITL)', 'LangGraph state machine · Intent routing · HITL'),
+    { icon: 'fa-diagram-project', color: '#14b8a6',
+      zh: '② 编排层', en: 'Orchestration Layer',
+      subzh: 'LangGraph 状态机 · 意图路由 · 人机协同 (HITL)', suben: 'LangGraph state machine · Intent routing · Human-in-the-loop',
       items: [
-        T('build_graph() → 感知 → 规划 → 工具 → 执行', 'build_graph() → perceive → plan → tool → act'),
-        T('run_turn(input, thread, company, role) 单一入口', 'run_turn(input, thread, company, role) single entry'),
-        T('意图检测主动递工具（如「怎么报销」→ 拍照卡片）', 'Intent detection proactively offers tools'),
-        T('风险分级 → needs_human / hil_level 人工兜底', 'Risk grading → needs_human / hil_level fallback'),
+        ['LangGraph 状态图 build_graph():感知 → 规划 → 调工具 → 执行,可追溯每一步', 'LangGraph state graph build_graph(): perceive → plan → call-tool → act, every step traceable'],
+        ['统一入口 run_turn(输入, 会话, 公司, 角色),按身份决定数据与权限边界', 'Single entry run_turn(input, thread, company, role) — identity decides data & permission scope'],
+        ['意图检测主动递工具:用户问「怎么报销」即推送拍照识别卡片', 'Intent detection proactively offers tools: asking "how to claim" pushes a photo-OCR card'],
+        ['风险分级触发 needs_human / hil_level,高风险自动转人工兜底', 'Risk grading triggers needs_human / hil_level — high risk auto-escalates to a human'],
       ] },
-    { key: 'L3', icon: 'fa-robot', color: '#8b5cf6',
-      title: T('③ 智能体层 · Agents（5 主 + 8 子 = 13）', '③ Agent Layer (5 main + 8 sub = 13)'),
-      sub: T('专家分工 · 多体协作 · 工具调用', 'Expert division · Multi-agent collab · Tool use'),
+    { icon: 'fa-robot', color: '#8b5cf6',
+      zh: '③ 智能体层 (5 主 + 8 子 = 13)', en: 'Agent Layer (5 main + 8 sub = 13)',
+      subzh: '专家分工 · 多体协作 · 工具调用', suben: 'Expert division · Multi-agent collaboration · Tool use',
       items: [
-        T('5 主 Agent：报销伙伴 / 审批副驾 / HR战略 / 薪资领航 / 洞察先知', '5 main: ClaimMate / ApprovalCopilot / HRStrategist / PayrollNavigator / InsightOracle'),
-        T('8 子 Agent：意图 / 政策 / 风险 / 抽取 / 流程 / 权益 / 对话 / 稽查', '8 sub: Intent / Policy / Risk / Extraction / Workflow / Entitlement / Conversation / Audit'),
+        ['5 个面向用户的主智能体,各管一条业务线(报销/审批/HR/薪资/分析)', '5 user-facing main agents, each owning a business line (claim / approval / HR / payroll / analytics)'],
+        ['8 个后台子智能体协同:意图、政策、风险、抽取、流程、权益、对话、稽查', '8 backstage sub-agents collaborate: intent, policy, risk, extraction, workflow, entitlement, conversation, audit'],
       ] },
-    { key: 'L4', icon: 'fa-microchip', color: '#f59e0b',
-      title: T('④ 引擎层 · Engines', '④ Engine Layer'),
-      sub: T('合规精度内核 · 可插拔大模型网关', 'Statutory precision core · Pluggable LLM gateway'),
+    { icon: 'fa-microchip', color: '#f59e0b',
+      zh: '④ 引擎层', en: 'Engine Layer',
+      subzh: '合规精度内核 · 可插拔大模型网关', suben: 'Statutory precision core · Pluggable LLM gateway',
       items: [
-        T('薪资精度引擎（加班分级 / 按比例 / HRDF / 企业总成本）', 'Payroll precision (OT tiers / pro-rata / HRDF / total cost)'),
-        T('法定文件引擎（CP39 / SOCSO 8A / IBG / LHDN 审计 / EA）', 'Statutory docs (CP39 / SOCSO 8A / IBG / LHDN audit / EA)'),
-        T('PCB 税务引擎 · 视觉 OCR 抽取 · 分析稽查引擎', 'PCB tax · Vision OCR · analytics & audit'),
-        T('LLM 网关（多供应商 / 模型绑定 / 降级兜底）', 'LLM gateway (multi-provider / model binding / fallback)'),
+        ['薪资精度引擎:加班分级、按比例计薪、HRDF 征费、企业总成本核算', 'Payroll precision engine: OT tiers, pro-rata pay, HRDF levy, employer total-cost'],
+        ['法定文件引擎:CP39、SOCSO 8A、银行 IBG、LHDN 审计追踪、EA 表', 'Statutory docs engine: CP39, SOCSO 8A, bank IBG, LHDN audit trail, EA form'],
+        ['PCB 税务引擎 + 视觉 OCR 抽取 + 共享分析稽查引擎', 'PCB tax engine + Vision OCR extraction + shared analytics & audit engine'],
+        ['LLM 网关:多供应商接入、模型按 Agent 绑定、失败降级兜底', 'LLM gateway: multi-provider, per-agent model binding, graceful fallback'],
       ] },
-    { key: 'L5', icon: 'fa-database', color: '#64748b',
-      title: T('⑤ 数据层 · Data', '⑤ Data Layer'),
-      sub: T('集团多公司隔离 · 角色级权限 · 全链路一致', 'Group multi-company isolation · RBAC · end-to-end consistency'),
+    { icon: 'fa-database', color: '#64748b',
+      zh: '⑤ 数据层', en: 'Data Layer',
+      subzh: '集团多公司隔离 · 角色级权限 · 全链路一致', suben: 'Group multi-company isolation · RBAC · end-to-end consistency',
       items: [
-        T('集团 / 公司 / 部门 / 员工主数据', 'Group / company / dept / employee master data'),
-        T('报销单 / 差旅 / 薪资批次 / 权益额度', 'Claims / travel / payroll batch / entitlements'),
-        T('6 角色权限矩阵 · effCompany() 数据隔离', '6-role RBAC matrix · effCompany() isolation'),
+        ['集团 / 公司 / 部门 / 员工四级主数据,多公司物理隔离', 'Four-tier master data (group / company / dept / employee), multi-company isolation'],
+        ['报销单、差旅、薪资批次、权益额度等业务数据按公司归集', 'Business data (claims, travel, payroll batches, entitlements) scoped per company'],
+        ['6 角色权限矩阵 + effCompany() 统一所有数据源的公司口径', '6-role RBAC matrix + effCompany() unifies company scope across all data sources'],
       ] },
   ];
-
   const layerCards = layers.map((l, i) => `
     <div class="arch-layer" style="--lc:${l.color}">
       <div class="arch-layer-head">
         <span class="arch-layer-ic"><i class="fas ${l.icon}"></i></span>
-        <div><div class="arch-layer-title">${l.title}</div>
-        <div class="arch-layer-sub">${l.sub}</div></div>
+        <div>
+          <div class="arch-layer-title">${l.zh} <span class="arch-layer-en">${l.en}</span></div>
+          <div class="arch-layer-sub">${l.subzh}<br><i>${l.suben}</i></div>
+        </div>
       </div>
-      <ul class="arch-layer-list">${l.items.map(x => `<li><i class="fas fa-angle-right"></i>${x}</li>`).join('')}</ul>
+      <ul class="arch-layer-list">${l.items.map(x => `<li><i class="fas fa-angle-right"></i>${biRow(x[0], x[1])}</li>`).join('')}</ul>
     </div>
     ${i < layers.length - 1 ? '<div class="arch-flow"><i class="fas fa-arrow-down-long"></i></div>' : ''}
   `).join('');
 
-  // ── 13 智能体矩阵 ──
-  const mainAgents = (S.agents || []).slice(0, 5);
-  const agentMatrix = mainAgents.map(a => `
-    <div class="arch-agent" style="--ac:${a.color}">
-      <div class="arch-agent-top"><span class="arch-agent-emoji">${a.emoji || '🤖'}</span>
-        <div class="arch-agent-name">${nameOf(a)}</div></div>
-      <div class="arch-agent-desc">${descOf(a)}</div>
-    </div>`).join('');
-  const subAgents = en
-    ? ['Intent', 'Policy', 'Risk', 'Extraction', 'Workflow', 'Entitlement', 'Conversation', 'Audit']
-    : ['意图', '政策', '风险', '抽取', '流程', '权益', '对话', '稽查'];
-  const subChips = subAgents.map(s => `<span class="arch-subchip">${s}</span>`).join('');
-
-  // ── 6 角色 ──
-  const roleCards = (S.roles || []).map(r => `
-    <div class="arch-role" style="--rc:${r.color}">
-      <span class="arch-role-ic"><i class="fas ${r.icon}"></i></span>
-      <span class="arch-role-name">${nameOf(r)}</span>
-    </div>`).join('');
-
-  // ── 18 模块 ──
-  const moduleGroups = [
-    { t: T('报销与权益', 'Claim & Entitlement'), items: [T('报销类型','Claim Types'), T('报销组','Claim Groups'), T('报销权益','Entitlements'), T('余额调整','Balance Adjust'), T('生成权益流程','Entitlement Gen')] },
-    { t: T('申请与审批', 'Apply & Approve'), items: [T('报销申请-自助','Self Claim'), T('报销申请-管理','Manage Claim'), T('差旅申请-管理','Manage Travel Req'), T('差旅报销-管理','Manage Travel Claim'), T('商务差旅申请-自助','Self Travel Req'), T('商务差旅报销-自助','Self Travel Claim')] },
-    { t: T('薪资与接口', 'Payroll & Interface'), items: [T('汇率','FX Rate'), T('报销接口流程','Interface Flow'), T('审核接口数据','Review Interface')] },
-    { t: T('报表与数据', 'Reports & Data'), items: [T('福利使用报表','Benefit Report'), T('差旅申请报表','Travel Report'), T('报销申请报表','Claim Report'), T('家庭信息','Family Info')] },
-  ];
-  const moduleHtml = moduleGroups.map(g => `
-    <div class="arch-mod-group">
-      <div class="arch-mod-gt">${g.t}<span>${g.items.length}</span></div>
-      <div class="arch-mod-items">${g.items.map(m => `<span class="arch-mod-chip">${m}</span>`).join('')}</div>
-    </div>`).join('');
-
-  // ── 技术栈 ──
-  const stack = [
-    { ic: 'fa-server', c: '#0d9488', t: T('后端','Backend'), v: 'FastAPI · Pydantic · Python' },
-    { ic: 'fa-diagram-project', c: '#8b5cf6', t: T('编排','Orchestration'), v: 'LangGraph 状态图' },
-    { ic: 'fa-brain', c: '#ec4899', t: T('大模型','LLM'), v: T('多供应商网关 · 视觉 OCR', 'Multi-provider · Vision OCR') },
-    { ic: 'fa-code', c: '#0ea5e9', t: T('前端','Frontend'), v: 'Vanilla JS · Tailwind · Chart.js' },
-  ];
-  const stackHtml = stack.map(s => `
-    <div class="arch-stack" style="--sc:${s.c}">
-      <span class="arch-stack-ic"><i class="fas ${s.ic}"></i></span>
-      <div><div class="arch-stack-t">${s.t}</div><div class="arch-stack-v">${s.v}</div></div>
-    </div>`).join('');
-
-  // ── 数据流 ──
+  // ════ 2. 一次请求的旅程(双语泳道) ════
   const flow = [
-    { ic: 'fa-comment-dots', t: T('用户提问/拍照','User asks / snaps') },
-    { ic: 'fa-route', t: T('意图路由','Intent routing') },
-    { ic: 'fa-robot', t: T('Agent 协作','Agent collab') },
-    { ic: 'fa-microchip', t: T('引擎计算','Engine compute') },
-    { ic: 'fa-shield-halved', t: T('合规校验','Compliance check') },
-    { ic: 'fa-square-poll-vertical', t: T('卡片/报表返回','Cards / report') },
+    ['fa-comment-dots', '用户提问/拍照', 'User asks / snaps'],
+    ['fa-route', '意图路由', 'Intent routing'],
+    ['fa-robot', 'Agent 协作', 'Agent collaboration'],
+    ['fa-microchip', '引擎计算', 'Engine compute'],
+    ['fa-shield-halved', '合规校验', 'Compliance check'],
+    ['fa-square-poll-vertical', '卡片/报表返回', 'Cards / report back'],
   ];
   const flowHtml = flow.map((f, i) => `
-    <div class="arch-fl"><span class="arch-fl-ic"><i class="fas ${f.ic}"></i></span><span>${f.t}</span></div>
+    <div class="arch-fl"><span class="arch-fl-ic"><i class="fas ${f[0]}"></i></span>
+      <span class="arch-fl-tx"><b>${f[1]}</b><i>${f[2]}</i></span></div>
     ${i < flow.length - 1 ? '<i class="fas fa-chevron-right arch-fl-arrow"></i>' : ''}`).join('');
 
-  // ── 迭代历程(8 波) ──
+  // ════ 3. 5 主智能体 · 功能手册(精确详解) ════
+  // 字段:emoji 名称 / 一句话定位 / 使用者 / 能做什么(精确清单)/ 典型对话 / 产出
+  const agentManual = [
+    { emoji: '🙋', color: '#10b981',
+      zh: '报销伙伴', en: 'ClaimMate',
+      rolezh: '面向全体员工的报销助手', roleen: 'Claim assistant for every employee',
+      userzh: '普通员工', useren: 'Employee',
+      can: [
+        ['拍照/对话提交报销:上传票据自动识别商户、金额、类别、日期并填单', 'Submit by photo/chat: OCR auto-extracts merchant, amount, category, date and fills the form'],
+        ['实时查询可报余额与年度额度,告知还能报多少、哪类已超限', 'Check claimable balance & annual quota — how much is left, which category is over limit'],
+        ['商务差旅预审批申请 + 行后差旅报销提交', 'Business-travel pre-approval requests + post-trip travel claims'],
+        ['登记/维护家属信息(用于家庭相关权益)', 'Register / maintain family info (for family-related entitlements)'],
+      ],
+      sayzh: '「我打车花了 88 块要报销」「我还能报多少钱」', sayen: '"I spent RM88 on a taxi to claim" · "How much can I still claim"',
+      outzh: '已入库报销单 + 余额卡 + 拍照识别结果卡', outen: 'Posted claim + balance card + OCR result card' },
+    { emoji: '✅', color: '#3b82f6',
+      zh: '审批副驾', en: 'ApprovalCopilot',
+      rolezh: '面向审批人的智能审批助手', roleen: 'Smart approval copilot for approvers',
+      userzh: '审批人 / 部门主管', useren: 'Approver / Line manager',
+      can: [
+        ['自动风险分级:对待审单据标注高/中/低风险并给出理由', 'Auto risk grading: tags pending items as high/mid/low with reasons'],
+        ['一键批量通过低风险报销,聚焦人工处理高风险', 'One-click batch-approve low-risk claims, focus humans on high-risk'],
+        ['异常检测:重复票据、超额、过期发票、节假日疑点', 'Anomaly detection: duplicate receipts, over-limit, expired invoices, holiday flags'],
+        ['人机协同:高风险自动转人工确认 (HITL)', 'Human-in-the-loop: high risk auto-routes to human confirmation'],
+      ],
+      sayzh: '「帮我审批待审单据」「批量通过低风险报销」', sayen: '"Approve my pending claims" · "Batch-approve low-risk claims"',
+      outzh: '风险分级清单 + 批量审批结果 + 异常告警', outen: 'Risk-graded list + batch result + anomaly alerts' },
+    { emoji: '🧠', color: '#8b5cf6',
+      zh: 'HR 战略顾问', en: 'HR Strategist',
+      rolezh: '面向 HR 的对话式政策配置专家', roleen: 'Conversational policy-config expert for HR',
+      userzh: 'HR 管理员', useren: 'HR Admin',
+      can: [
+        ['对话式配置报销类型、报销组、报销权益规则', 'Chat-config claim types, claim groups, entitlement rules'],
+        ['权益预算优化建议与年度权益批量生成', 'Entitlement budget optimization + bulk annual entitlement generation'],
+        ['政策推理:依据规则解释「为什么这笔不能报」', 'Policy reasoning: explains "why this claim is not allowed" by rules'],
+        ['余额调整(带审批留痕)', 'Balance adjustment (with audit trail)'],
+      ],
+      sayzh: '「帮我配置报销类型」「推荐权益预算方案」', sayen: '"Help me configure claim types" · "Recommend an entitlement budget"',
+      outzh: '配置变更单 + 权益方案 + 政策解释', outen: 'Config change + entitlement plan + policy explanation' },
+    { emoji: '⚙️', color: '#f59e0b',
+      zh: '薪资领航员', en: 'Payroll Navigator',
+      rolezh: '面向薪资专员的跑批与对账引擎', roleen: 'Batch & reconciliation engine for payroll officers',
+      userzh: '薪资专员', useren: 'Payroll Officer',
+      can: [
+        ['自主薪资跑批,自动核算 EPF/SOCSO/EIS/PCB 法定扣缴', 'Autonomous payroll run, auto-computes EPF/SOCSO/EIS/PCB statutory deductions'],
+        ['接口数据审核:报销→薪资接口流程校验与异常预警', 'Interface data review: claim→payroll flow validation & anomaly alerts'],
+        ['多币种汇率查询与折算', 'Multi-currency FX lookup & conversion'],
+        ['对账:发薪明细与银行 IBG 文件一致性核对', 'Reconciliation: payslip vs bank IBG file consistency'],
+      ],
+      sayzh: '「执行薪资跑批」「查一下美元汇率」', sayen: '"Run payroll batch" · "Check the USD exchange rate"',
+      outzh: '薪资批次结果 + 异常预警 + 汇率折算', outen: 'Payroll batch result + anomaly alerts + FX conversion' },
+    { emoji: '📊', color: '#ec4899',
+      zh: '洞察先知', en: 'Insight Oracle',
+      rolezh: '面向财务/管理层的分析与报表大师', roleen: 'Analytics & reporting master for finance/management',
+      userzh: '财务 / 审计 / 管理者', useren: 'Finance / Audit / Manager',
+      can: [
+        ['自然语言转 SQL (NL2SQL),用大白话查任意经营数据', 'Natural-language-to-SQL: query any business data in plain words'],
+        ['预测分析:费用趋势、超支预警、预算缺口预测', 'Forecasting: spend trends, over-budget warnings, gap prediction'],
+        ['自动生成福利使用、差旅、报销三大报表', 'Auto-generates benefit-usage, travel, and claim reports'],
+        ['一键生成月度总结 PPT', 'One-click monthly summary PPT'],
+      ],
+      sayzh: '「看一下福利使用报表」「生成报销月度总结 PPT」', sayen: '"Show the benefits report" · "Generate a monthly expense PPT"',
+      outzh: '可视化报表 + 预测图 + PPT 文件', outen: 'Visual reports + forecast charts + PPT file' },
+  ];
+  const agentManualHtml = agentManual.map(a => `
+    <div class="arch-amx" style="--ac:${a.color}">
+      <div class="arch-amx-head">
+        <span class="arch-amx-emoji">${a.emoji}</span>
+        <div class="arch-amx-title">
+          <div class="arch-amx-name">${a.zh} <span>${a.en}</span></div>
+          <div class="arch-amx-role">${a.rolezh}<br><i>${a.roleen}</i></div>
+        </div>
+        <span class="arch-amx-user"><i class="fas fa-user-tag"></i> ${a.userzh} / ${a.useren}</span>
+      </div>
+      <div class="arch-amx-cando">${biH2cap('能做什么', 'What it can do')}</div>
+      <ul class="arch-amx-list">${a.can.map(c => `<li><i class="fas fa-check"></i>${biRow(c[0], c[1])}</li>`).join('')}</ul>
+      <div class="arch-amx-foot">
+        <div><span class="arch-amx-lbl"><i class="fas fa-quote-left"></i> 典型对话 / Typical</span>${biRow(a.sayzh, a.sayen)}</div>
+        <div><span class="arch-amx-lbl"><i class="fas fa-box-open"></i> 产出 / Output</span>${biRow(a.outzh, a.outen)}</div>
+      </div>
+    </div>`).join('');
+
+  // 8 子智能体(双语 chip)
+  const subAgents = [
+    ['意图', 'Intent', '识别用户想干什么', 'Detect user intent'],
+    ['政策', 'Policy', '匹配报销/薪资规则', 'Match claim/payroll rules'],
+    ['风险', 'Risk', '评估单据风险等级', 'Grade item risk level'],
+    ['抽取', 'Extraction', '票据 OCR 字段抽取', 'OCR field extraction'],
+    ['流程', 'Workflow', '驱动审批工作流', 'Drive approval workflow'],
+    ['权益', 'Entitlement', '核算额度与权益', 'Compute quota & benefits'],
+    ['对话', 'Conversation', '维护多轮上下文', 'Keep multi-turn context'],
+    ['稽查', 'Audit', '异常与合规稽查', 'Anomaly & compliance audit'],
+  ];
+  const subChips = subAgents.map(s => `
+    <div class="arch-subcard">
+      <div class="arch-subcard-t">${s[0]} <span>${s[1]}</span></div>
+      ${biRow(s[2], s[3])}
+    </div>`).join('');
+
+  // ════ 4. 18 业务模块 · 功能手册(逐条精确说明) ════
+  // 分组 → [中文名, 英文名, 精确功能说明(中), 精确功能说明(英)]
+  const moduleManual = [
+    { gzh: '报销与权益', gen: 'Claim & Entitlement', icon: 'fa-hand-holding-dollar', color: '#10b981', items: [
+      ['报销类型', 'Claim Types', '定义可报销的费用类目(餐饮/交通/住宿…)及每类的单据要求与限额', 'Define claimable expense categories (meals/transport/lodging…) with receipt rules & limits'],
+      ['报销组', 'Claim Groups', '把报销类型打包成组,按职级/部门批量套用权益规则', 'Bundle claim types into groups, apply entitlements by grade/dept in bulk'],
+      ['报销权益', 'Entitlements', '设定每人/每组的年度额度、周期与可报范围', 'Set annual quota, cycle and scope per person/group'],
+      ['余额调整', 'Balance Adjust', '对个人额度做增减调整,全程留审批痕迹', 'Increase/decrease individual quota with full audit trail'],
+      ['生成权益流程', 'Entitlement Gen', '按规则一键批量生成全员年度权益额度', 'One-click bulk-generate annual entitlements by rule'],
+    ] },
+    { gzh: '申请与审批', gen: 'Apply & Approve', icon: 'fa-file-circle-check', color: '#3b82f6', items: [
+      ['报销申请-自助', 'Self Claim', '员工本人提交报销:拍照识别、填单、查额度、看进度', 'Employee self-submit: OCR, fill form, check quota, track status'],
+      ['报销申请-管理', 'Manage Claim', '审批人处理报销:风险分级、批量审批、退回补充', 'Approver handling: risk grading, batch approve, return for revision'],
+      ['差旅申请-管理', 'Manage Travel Req', '审批商务差旅预申请,控制行前预算', 'Approve business-travel pre-requests, control pre-trip budget'],
+      ['差旅报销-管理', 'Manage Travel Claim', '审批行后差旅实报,核对预算与实际差异', 'Approve post-trip travel claims, reconcile budget vs actual'],
+      ['商务差旅申请-自助', 'Self Travel Req', '员工提交差旅预审批(目的地/预算/事由)', 'Employee submits travel pre-approval (destination/budget/reason)'],
+      ['商务差旅报销-自助', 'Self Travel Claim', '员工提交行后差旅费用报销与票据', 'Employee submits post-trip travel expenses & receipts'],
+    ] },
+    { gzh: '薪资与接口', gen: 'Payroll & Interface', icon: 'fa-money-check-dollar', color: '#f59e0b', items: [
+      ['汇率', 'FX Rate', '维护多币种汇率,供报销/薪资折算', 'Maintain multi-currency FX rates for claim/payroll conversion'],
+      ['报销接口流程', 'Interface Flow', '把已批报销推送到薪资/会计接口的流程编排', 'Orchestrate pushing approved claims to payroll/accounting interface'],
+      ['审核接口数据', 'Review Interface', '推送前校验接口数据,拦截异常与跳变', 'Validate interface data pre-push, block anomalies & spikes'],
+    ] },
+    { gzh: '报表与数据', gen: 'Reports & Data', icon: 'fa-chart-pie', color: '#ec4899', items: [
+      ['福利使用报表', 'Benefit Report', '统计各类权益的使用率、剩余与超支分布', 'Stats on entitlement usage rate, remaining & over-spend distribution'],
+      ['差旅申请报表', 'Travel Report', '差旅申请/报销的频次、金额、目的地分析', 'Travel request/claim frequency, amount, destination analytics'],
+      ['报销申请报表', 'Claim Report', '报销总量、类别占比、月度趋势与导出', 'Total claims, category mix, monthly trend & export'],
+      ['家庭信息', 'Family Info', '维护员工家属信息,支撑家庭相关权益核算', 'Maintain employee family info for family-related entitlements'],
+    ] },
+  ];
+  const moduleManualHtml = moduleManual.map(g => `
+    <div class="arch-mmx-group">
+      <div class="arch-mmx-gt" style="--mc:${g.color}">
+        <span class="arch-mmx-gic"><i class="fas ${g.icon}"></i></span>
+        <span>${g.gzh} <em>${g.gen}</em></span>
+        <span class="arch-mmx-cnt">${g.items.length}</span>
+      </div>
+      <div class="arch-mmx-items">
+        ${g.items.map(m => `
+          <div class="arch-mmx-item">
+            <div class="arch-mmx-name">${m[0]} <span>${m[1]}</span></div>
+            ${biRow(m[2], m[3])}
+          </div>`).join('')}
+      </div>
+    </div>`).join('');
+
+  // ════ 5. 6 角色权限(精确权责描述) ════
+  const roleManual = {
+    employee:  ['提交报销/差旅、查额度、看本人薪资单、维护家属', 'Submit claims/travel, check quota, view own payslip, manage family'],
+    approver:  ['审批本部门报销/差旅,风险分级与批量处理', 'Approve dept claims/travel, risk grading & batch handling'],
+    hr_admin:  ['配置报销类型/组/权益、生成权益、AI 配置后台', 'Configure types/groups/entitlements, generate entitlements, AI config'],
+    payroll:   ['薪资跑批、接口审核、汇率维护、对账', 'Payroll run, interface review, FX maintenance, reconciliation'],
+    finance:   ['费用报表、审计稽查、合规核查、数据导出', 'Expense reports, audit, compliance check, data export'],
+    sys_admin: ['全局管理、跨公司切换、系统配置、全权限', 'Global admin, cross-company switch, system config, full access'],
+  };
+  const roleCards = (S.roles || []).map(r => {
+    const m = roleManual[r.id] || ['', ''];
+    return `
+    <div class="arch-rolex" style="--rc:${r.color}">
+      <div class="arch-rolex-head">
+        <span class="arch-rolex-ic"><i class="fas ${r.icon}"></i></span>
+        <span class="arch-rolex-name">${r.name || ''}<em>${r.name_en || ''}</em></span>
+      </div>
+      ${biRow(m[0], m[1])}
+    </div>`;
+  }).join('');
+
+  // ════ 6. 技术栈 ════
+  const stack = [
+    ['fa-server', '#0d9488', '后端', 'Backend', 'FastAPI · Pydantic · Python'],
+    ['fa-diagram-project', '#8b5cf6', '编排', 'Orchestration', 'LangGraph 状态图 / state graph'],
+    ['fa-brain', '#ec4899', '大模型', 'LLM', '多供应商网关 · 视觉 OCR / Multi-provider · Vision OCR'],
+    ['fa-code', '#0ea5e9', '前端', 'Frontend', 'Vanilla JS · Tailwind · Chart.js'],
+  ];
+  const stackHtml = stack.map(s => `
+    <div class="arch-stack" style="--sc:${s[1]}">
+      <span class="arch-stack-ic"><i class="fas ${s[0]}"></i></span>
+      <div><div class="arch-stack-t">${s[2]} <em>${s[3]}</em></div><div class="arch-stack-v">${s[4]}</div></div>
+    </div>`).join('');
+
+  // ════ 7. 合规精度内核 ════
+  const comp = [
+    ['fa-file-invoice-dollar', 'EPF / SOCSO / EIS / PCB', '马来西亚法定扣缴精算', 'MY statutory deductions'],
+    ['fa-file-contract', 'CP39 / SOCSO 8A / IBG', '政府申报与银行文件', 'Gov filing & bank files'],
+    ['fa-magnifying-glass-chart', 'LHDN 审计追踪', '凭证分类账 · 异常稽查', 'Ledger · anomaly audit'],
+    ['fa-clock', '加班分级 / 按比例', 'HRDF · 企业总成本', 'HRDF · employer total cost'],
+  ];
+  const compHtml = comp.map(c => `
+    <div class="arch-comp-card"><i class="fas ${c[0]}"></i><b>${c[1]}</b>${biRow(c[2], c[3])}</div>`).join('');
+
+  // ════ 8. 迭代历程(双语) ════
   const waves = [
-    T('Wave1 业务流程引擎', 'Wave1 Workflow engine'),
-    T('Wave2 薪资精度引擎', 'Wave2 Payroll precision'),
-    T('Wave3 政府法定文件', 'Wave3 Statutory documents'),
-    T('Wave4 AI 老板驾驶舱 + 异常稽查', 'Wave4 AI cockpit + audit'),
-    T('Wave5 员工自助门户', 'Wave5 Employee self-portal'),
-    T('Wave6 报销页打通', 'Wave6 Claim page wired'),
-    T('Wave7 数据一致化 + 布局防溢出', 'Wave7 Data consistency + layout'),
-    T('Wave8 AI 对话式拍照识别', 'Wave8 AI conversational OCR'),
+    ['Wave1', '业务流程引擎', 'Workflow engine'],
+    ['Wave2', '薪资精度引擎', 'Payroll precision engine'],
+    ['Wave3', '政府法定文件', 'Statutory documents'],
+    ['Wave4', 'AI 老板驾驶舱 + 异常稽查', 'AI cockpit + anomaly audit'],
+    ['Wave5', '员工自助门户', 'Employee self-portal'],
+    ['Wave6', '报销页打通', 'Claim page wired'],
+    ['Wave7', '数据一致化 + 布局防溢出', 'Data consistency + layout'],
+    ['Wave8', 'AI 对话式拍照识别', 'AI conversational OCR'],
+    ['Wave9', '系统架构图谱 + 双语说明书', 'Architecture map + bilingual manual'],
   ];
   const waveHtml = waves.map((w, i) => `
     <div class="arch-wave ${i === waves.length - 1 ? 'now' : ''}">
-      <span class="arch-wave-dot"></span><span>${w}</span></div>`).join('');
+      <span class="arch-wave-dot"></span>
+      <span class="arch-wave-tx"><b>${w[0]}</b> ${w[1]} <i>· ${w[2]}</i></span>
+    </div>`).join('');
 
+  // ════ 渲染 ════
   $('#view').innerHTML = `
   <div class="arch-page">
-    <!-- 返回 -->
-    <button class="arch-back" onclick="go('dashboard')"><i class="fas fa-arrow-left"></i> ${T('返回工作台','Back to workspace')}</button>
+    <button class="arch-back" onclick="go('dashboard')"><i class="fas fa-arrow-left"></i> 返回工作台 / Back</button>
 
     <!-- 品牌头图 -->
     <header class="arch-hero">
-      <div class="arch-hero-logo" style="background:${S.group ? S.group.color : '#20c997'}">${S.group ? S.group.logo : 'P'}</div>
-      <h1>${T('Paydaes ClaimGPT','Paydaes ClaimGPT')}</h1>
-      <p class="arch-hero-tag">${T('集团级 AI-Native 报销 · 薪资 · 合规智能平台','Enterprise AI-Native Expense · Payroll · Compliance Platform')}</p>
+      <div class="arch-hero-logo" style="background:${G.color}">${G.logo}</div>
+      <h1>Paydaes ClaimGPT</h1>
+      <p class="arch-hero-tag">集团级 AI-Native 报销 · 薪资 · 合规智能平台</p>
+      <p class="arch-hero-tag-en">Enterprise AI-Native Expense · Payroll · Compliance Platform</p>
       <div class="arch-hero-stats">
-        <div><b>5+8</b><span>${T('智能体','Agents')}</span></div>
-        <div><b>18</b><span>${T('业务模块','Modules')}</span></div>
-        <div><b>6</b><span>${T('角色权限','Roles')}</span></div>
-        <div><b>8</b><span>${T('迭代波次','Waves')}</span></div>
+        <div><b>5+8</b><span>智能体 / Agents</span></div>
+        <div><b>18</b><span>业务模块 / Modules</span></div>
+        <div><b>6</b><span>角色权限 / Roles</span></div>
+        <div><b>9</b><span>迭代波次 / Waves</span></div>
       </div>
     </header>
 
-    <!-- 数据流 -->
-    <section class="arch-sec">
-      <h2 class="arch-h2"><i class="fas fa-arrows-turn-right"></i> ${T('一次请求的旅程','The Journey of a Request')}</h2>
+    <!-- 锚点导航 -->
+    <nav class="arch-toc">
+      <a href="#arch-flow"><i class="fas fa-arrows-turn-right"></i> 请求旅程 / Journey</a>
+      <a href="#arch-layers"><i class="fas fa-layer-group"></i> 五层架构 / Layers</a>
+      <a href="#arch-agents"><i class="fas fa-robot"></i> 智能体手册 / Agents</a>
+      <a href="#arch-modules"><i class="fas fa-cubes"></i> 18 模块 / Modules</a>
+      <a href="#arch-roles"><i class="fas fa-users-gear"></i> 角色权限 / Roles</a>
+      <a href="#arch-tech"><i class="fas fa-screwdriver-wrench"></i> 技术与合规 / Tech</a>
+    </nav>
+
+    <section class="arch-sec" id="arch-flow">
+      ${biH2('fa-arrows-turn-right', '一次请求的旅程', 'The Journey of a Request')}
       <div class="arch-flowbar">${flowHtml}</div>
     </section>
 
-    <!-- 分层架构图谱 -->
-    <section class="arch-sec">
-      <h2 class="arch-h2"><i class="fas fa-layer-group"></i> ${T('五层架构图谱','5-Layer Architecture')}</h2>
+    <section class="arch-sec" id="arch-layers">
+      ${biH2('fa-layer-group', '五层架构图谱', '5-Layer Architecture')}
       <div class="arch-stack-wrap">${layerCards}</div>
     </section>
 
-    <!-- 智能体矩阵 -->
-    <section class="arch-sec">
-      <h2 class="arch-h2"><i class="fas fa-robot"></i> ${T('AI 智能体团队','AI Agent Team')}</h2>
-      <div class="arch-agents">${agentMatrix}</div>
-      <div class="arch-sublabel">${T('支撑子智能体（8）','Supporting sub-agents (8)')}</div>
-      <div class="arch-subchips">${subChips}</div>
+    <section class="arch-sec" id="arch-agents">
+      ${biH2('fa-robot', 'AI 智能体团队 · 功能手册', 'AI Agent Team · Function Manual')}
+      <div class="arch-amx-wrap">${agentManualHtml}</div>
+      <div class="arch-sublabel">支撑子智能体(8)/ Supporting sub-agents (8)</div>
+      <div class="arch-subcards">${subChips}</div>
     </section>
 
-    <!-- 业务模块 -->
-    <section class="arch-sec">
-      <h2 class="arch-h2"><i class="fas fa-cubes"></i> ${T('18 个业务模块','18 Business Modules')}</h2>
-      <div class="arch-mods">${moduleHtml}</div>
+    <section class="arch-sec" id="arch-modules">
+      ${biH2('fa-cubes', '18 个业务模块 · 逐条详解', '18 Business Modules · Detailed')}
+      <div class="arch-mmx">${moduleManualHtml}</div>
     </section>
 
-    <!-- 角色权限 -->
-    <section class="arch-sec">
-      <h2 class="arch-h2"><i class="fas fa-users-gear"></i> ${T('6 角色权限模型','6-Role Permission Model')}</h2>
-      <div class="arch-roles">${roleCards}</div>
+    <section class="arch-sec" id="arch-roles">
+      ${biH2('fa-users-gear', '6 角色权限模型 · 权责详解', '6-Role Permission Model · Responsibilities')}
+      <div class="arch-rolesx">${roleCards}</div>
     </section>
 
-    <!-- 技术栈 -->
-    <section class="arch-sec">
-      <h2 class="arch-h2"><i class="fas fa-screwdriver-wrench"></i> ${T('技术栈','Tech Stack')}</h2>
+    <section class="arch-sec" id="arch-tech">
+      ${biH2('fa-screwdriver-wrench', '技术栈', 'Tech Stack')}
       <div class="arch-stacks">${stackHtml}</div>
     </section>
 
-    <!-- 合规能力 -->
     <section class="arch-sec">
-      <h2 class="arch-h2"><i class="fas fa-shield-halved"></i> ${T('合规与精度内核','Compliance & Precision Core')}</h2>
-      <div class="arch-comp">
-        <div class="arch-comp-card"><i class="fas fa-file-invoice-dollar"></i><b>EPF / SOCSO / EIS / PCB</b><span>${T('马来西亚法定扣缴精算','MY statutory deductions')}</span></div>
-        <div class="arch-comp-card"><i class="fas fa-file-contract"></i><b>CP39 / SOCSO 8A / IBG</b><span>${T('政府申报与银行文件','Gov filing & bank files')}</span></div>
-        <div class="arch-comp-card"><i class="fas fa-magnifying-glass-chart"></i><b>LHDN ${T('审计追踪','Audit trail')}</b><span>${T('凭证分类账 · 异常稽查','Ledger · anomaly audit')}</span></div>
-        <div class="arch-comp-card"><i class="fas fa-clock"></i><b>${T('加班分级 / 按比例','OT tiers / pro-rata')}</b><span>${T('HRDF · 企业总成本','HRDF · total cost')}</span></div>
-      </div>
+      ${biH2('fa-shield-halved', '合规与精度内核', 'Compliance & Precision Core')}
+      <div class="arch-comp">${compHtml}</div>
     </section>
 
-    <!-- 迭代历程 -->
     <section class="arch-sec">
-      <h2 class="arch-h2"><i class="fas fa-timeline"></i> ${T('迭代历程 · 八波进化','Evolution · 8 Waves')}</h2>
+      ${biH2('fa-timeline', '迭代历程 · 九波进化', 'Evolution · 9 Waves')}
       <div class="arch-waves">${waveHtml}</div>
     </section>
 
     <footer class="arch-foot">
-      ${T('Paydaes ClaimGPT · 集团版 V3.0 · 由 LangGraph 编排引擎驱动','Paydaes ClaimGPT · Enterprise V3.0 · Powered by LangGraph')}
+      Paydaes ClaimGPT · 集团版 V3.0 · 由 LangGraph 编排引擎驱动<br>
+      <i>Paydaes ClaimGPT · Enterprise V3.0 · Powered by LangGraph</i>
     </footer>
   </div>`;
 }
