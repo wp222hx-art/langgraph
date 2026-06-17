@@ -721,3 +721,108 @@ body.mode-mobile #view [class*="col-span"] { grid-column:auto !important; }
 /* ★ 关键:解除 grid/flex 子项默认 min-width:auto,否则内部内容会把 panel 撑破列宽 ★ */
 body.mode-mobile #view .grid > * { min-width:0 !important; width:100% !important; }
 body.mode-mobile #view .flex > * { min-width:0; }
+
+/* ═══════════════════════════════════════════════════════════
+   系统架构图谱 + 说明书页(点击左上角集团 Logo 进入)
+   ═══════════════════════════════════════════════════════════ */
+.arch-page { max-width:1080px; margin:0 auto; padding-bottom:48px; animation:archfade .4s ease; }
+@keyframes archfade { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+.arch-back { display:inline-flex; align-items:center; gap:7px; font-size:13px; color:#64748b;
+  background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:7px 14px; cursor:pointer; margin-bottom:18px; transition:.15s; }
+.arch-back:hover { color:#0d9488; border-color:#5eead4; background:#f0fdfa; }
+
+/* 品牌头图 */
+.arch-hero { position:relative; text-align:center; border-radius:24px; padding:42px 24px 30px;
+  background:linear-gradient(135deg,#0f172a 0%,#134e4a 55%,#0d9488 100%); color:#fff; overflow:hidden; box-shadow:0 18px 48px -16px rgba(13,148,136,.5); }
+.arch-hero::after { content:""; position:absolute; inset:0;
+  background:radial-gradient(circle at 80% 0%,rgba(45,217,194,.35),transparent 55%); pointer-events:none; }
+.arch-hero-logo { width:62px; height:62px; border-radius:18px; margin:0 auto 16px; display:flex; align-items:center; justify-content:center;
+  font-size:32px; font-weight:800; color:#fff; box-shadow:0 8px 24px rgba(0,0,0,.3); position:relative; z-index:1; }
+.arch-hero h1 { font-size:30px; font-weight:800; letter-spacing:-.5px; position:relative; z-index:1; }
+.arch-hero-tag { margin-top:8px; font-size:14px; opacity:.82; position:relative; z-index:1; }
+.arch-hero-stats { display:flex; justify-content:center; gap:14px; margin-top:24px; flex-wrap:wrap; position:relative; z-index:1; }
+.arch-hero-stats > div { background:rgba(255,255,255,.1); backdrop-filter:blur(6px); border:1px solid rgba(255,255,255,.16);
+  border-radius:14px; padding:12px 20px; min-width:84px; }
+.arch-hero-stats b { display:block; font-size:24px; font-weight:800; color:#5eead4; }
+.arch-hero-stats span { font-size:11px; opacity:.8; }
+
+/* 区块 */
+.arch-sec { margin-top:34px; }
+.arch-h2 { display:flex; align-items:center; gap:9px; font-size:17px; font-weight:700; color:#0f172a; margin-bottom:16px; }
+.arch-h2 i { color:#0d9488; }
+
+/* 数据流 */
+.arch-flowbar { display:flex; align-items:center; flex-wrap:wrap; gap:6px; background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:16px; }
+.arch-fl { display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; color:#334155;
+  background:#f0fdfa; border:1px solid #ccfbf1; border-radius:10px; padding:8px 12px; }
+.arch-fl-ic { width:26px; height:26px; border-radius:8px; background:#0d9488; color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; }
+.arch-fl-arrow { color:#94a3b8; font-size:12px; }
+
+/* 五层架构 */
+.arch-stack-wrap { display:flex; flex-direction:column; }
+.arch-layer { background:#fff; border:1px solid #e2e8f0; border-left:5px solid var(--lc); border-radius:14px; padding:18px 20px; box-shadow:0 4px 14px -8px rgba(0,0,0,.1); }
+.arch-layer-head { display:flex; align-items:center; gap:13px; }
+.arch-layer-ic { width:42px; height:42px; border-radius:12px; background:var(--lc); color:#fff; display:flex; align-items:center; justify-content:center; font-size:18px; flex:0 0 auto; }
+.arch-layer-title { font-size:15px; font-weight:700; color:#0f172a; }
+.arch-layer-sub { font-size:12px; color:#94a3b8; margin-top:2px; }
+.arch-layer-list { list-style:none; margin:13px 0 0; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:7px 18px; }
+.arch-layer-list li { font-size:13px; color:#475569; display:flex; align-items:flex-start; gap:7px; line-height:1.5; }
+.arch-layer-list li i { color:var(--lc); font-size:11px; margin-top:4px; flex:0 0 auto; }
+.arch-flow { text-align:center; color:#cbd5e1; font-size:18px; padding:5px 0; }
+
+/* 智能体 */
+.arch-agents { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:13px; }
+.arch-agent { background:#fff; border:1px solid #e2e8f0; border-top:4px solid var(--ac); border-radius:14px; padding:15px; transition:.18s; }
+.arch-agent:hover { transform:translateY(-3px); box-shadow:0 12px 26px -12px var(--ac); }
+.arch-agent-top { display:flex; align-items:center; gap:10px; }
+.arch-agent-emoji { font-size:22px; }
+.arch-agent-name { font-size:14.5px; font-weight:700; color:#0f172a; }
+.arch-agent-desc { font-size:12px; color:#64748b; margin-top:8px; line-height:1.55; }
+.arch-sublabel { font-size:12.5px; font-weight:600; color:#94a3b8; margin:18px 0 10px; }
+.arch-subchips { display:flex; flex-wrap:wrap; gap:8px; }
+.arch-subchip { font-size:12px; font-weight:600; color:#7c3aed; background:#f5f3ff; border:1px solid #ddd6fe; border-radius:999px; padding:6px 14px; }
+
+/* 模块 */
+.arch-mods { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; }
+.arch-mod-group { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:15px; }
+.arch-mod-gt { font-size:13.5px; font-weight:700; color:#0f172a; margin-bottom:11px; display:flex; align-items:center; gap:8px; }
+.arch-mod-gt span { font-size:11px; font-weight:700; color:#0d9488; background:#f0fdfa; border-radius:6px; padding:1px 8px; }
+.arch-mod-items { display:flex; flex-wrap:wrap; gap:7px; }
+.arch-mod-chip { font-size:12px; color:#475569; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:5px 10px; }
+
+/* 角色 */
+.arch-roles { display:flex; flex-wrap:wrap; gap:11px; }
+.arch-role { display:flex; align-items:center; gap:10px; background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:11px 16px; }
+.arch-role-ic { width:32px; height:32px; border-radius:9px; background:var(--rc); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; }
+.arch-role-name { font-size:13.5px; font-weight:600; color:#1e293b; }
+
+/* 技术栈 */
+.arch-stacks { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:13px; }
+.arch-stack { display:flex; align-items:center; gap:13px; background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:15px; }
+.arch-stack-ic { width:42px; height:42px; border-radius:12px; background:var(--sc); color:#fff; display:flex; align-items:center; justify-content:center; font-size:17px; flex:0 0 auto; }
+.arch-stack-t { font-size:13px; font-weight:700; color:#0f172a; }
+.arch-stack-v { font-size:12px; color:#64748b; margin-top:2px; }
+
+/* 合规 */
+.arch-comp { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:13px; }
+.arch-comp-card { background:linear-gradient(135deg,#fff,#f0fdfa); border:1px solid #ccfbf1; border-radius:14px; padding:16px; text-align:center; }
+.arch-comp-card i { font-size:22px; color:#0d9488; margin-bottom:9px; }
+.arch-comp-card b { display:block; font-size:13.5px; color:#0f172a; }
+.arch-comp-card span { display:block; font-size:11.5px; color:#64748b; margin-top:5px; }
+
+/* 迭代波次 */
+.arch-waves { position:relative; padding-left:8px; }
+.arch-wave { display:flex; align-items:center; gap:13px; padding:9px 0; font-size:13.5px; color:#475569; border-left:2px solid #e2e8f0; padding-left:20px; margin-left:6px; }
+.arch-wave-dot { position:absolute; left:0; width:13px; height:13px; border-radius:50%; background:#cbd5e1; border:3px solid #fff; box-shadow:0 0 0 1px #e2e8f0; margin-left:0; transform:translateX(-6px); }
+.arch-wave.now { color:#0d9488; font-weight:700; }
+.arch-wave.now .arch-wave-dot { background:#0d9488; box-shadow:0 0 0 4px rgba(13,148,136,.18); }
+
+.arch-foot { text-align:center; font-size:12px; color:#94a3b8; margin-top:36px; padding-top:20px; border-top:1px dashed #e2e8f0; }
+
+/* 移动端适配 */
+@media (max-width:640px) {
+  .arch-layer-list { grid-template-columns:1fr; }
+  .arch-hero h1 { font-size:24px; }
+  .arch-hero-stats > div { padding:10px 14px; min-width:70px; }
+}
+body.mode-mobile #view .arch-layer-list { grid-template-columns:1fr !important; }

@@ -34,6 +34,7 @@ const I18N = {
       global: '全球合规', notifications: '通知', ai_assistant: 'AI 助手',
       switch_company: '切换公司', switch_role: '切换角色', switch_lang: '切换语言',
     },
+    arch: { enter: '查看系统架构与说明书' },
     nav: {
       footer_engine: 'LangGraph 编排引擎', footer_agents: '5主 + 8子 Agent · 18 模块',
       footer_version: 'Paydaes ClaimGPT · 集团版 V3.0',
@@ -203,6 +204,7 @@ const I18N = {
       global: 'Global Compliance', notifications: 'Notifications', ai_assistant: 'AI Assistant',
       switch_company: 'Switch Company', switch_role: 'Switch Role', switch_lang: 'Language',
     },
+    arch: { enter: 'View System Architecture & Manual' },
     nav: {
       footer_engine: 'LangGraph Orchestration', footer_agents: '5 Main + 8 Sub Agents · 18 Modules',
       footer_version: 'Paydaes ClaimGPT · Enterprise V3.0',
