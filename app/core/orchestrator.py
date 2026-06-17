@@ -86,6 +86,23 @@ def build_graph():
 # 全局单例
 GRAPH = build_graph()
 
+# "怎么报销/如何提交/能拍照吗"等操作意图关键词 → 主动递上拍照识别入口
+_UPLOAD_KEYWORDS = (
+    "怎么报销", "如何报销", "怎样报销", "怎么提交", "如何提交", "怎么申请", "如何申请",
+    "怎么填", "怎么做", "怎么弄", "拍照", "上传", "发票", "收据", "票据", "扫描", "识别",
+    "报销流程", "报销单怎么", "贴发票", "录入",
+    "how to claim", "how do i claim", "submit a claim", "upload", "receipt",
+    "invoice", "take a photo", "scan", "how to submit",
+)
+
+
+def _wants_upload(text: str) -> bool:
+    """轻量意图识别:用户是否在问"怎么报销/能否拍照上传"这类可用 OCR 解决的操作问题。"""
+    if not text:
+        return False
+    low = text.lower()
+    return any(kw in text or kw in low for kw in _UPLOAD_KEYWORDS)
+
 
 def run_turn(user_input: str, thread_id: str = "default", company: str = "sg",
              role: str = "employee") -> dict:
@@ -97,9 +114,24 @@ def run_turn(user_input: str, thread_id: str = "default", company: str = "sg",
     _start = _t.time()
     final = GRAPH.invoke(init, config)
     telemetry.turn((_t.time() - _start) * 1000)  # 真实埋点:整轮编排耗时(ms)
+    cards = final.get("cards", [])
+    # ── 主动递上"拍照识别"入口 ──
+    # 当用户在对话里询问"怎么报销/如何提交/能不能拍照"等操作类意图时,
+    # 不止给文字答复,还附一个 upload_action 卡片,前端渲染成醒目的拍照识别按钮。
+    if _wants_upload(user_input) and not any(c.get("type") == "upload_action" for c in cards):
+        cards = cards + [{
+            "type": "upload_action",
+            "title": "📷 拍照识别 · 自动填单",
+            "data": {
+                "hint": "拍张发票/收据照片,我来自动识别商户、金额、类别并帮您填好报销单。",
+                "hint_en": "Snap a photo of your receipt — I'll auto-extract the merchant, amount and category and fill the claim for you.",
+                "btn": "拍照/上传票据",
+                "btn_en": "Snap / Upload Receipt",
+            },
+        }]
     return {
         "reply": final.get("reply", ""),
-        "cards": final.get("cards", []),
+        "cards": cards,
         "think": final.get("think", []),
         "agent": final.get("target_agent", "ClaimMate"),
         "module": final.get("module", ""),

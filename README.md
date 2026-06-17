@@ -42,6 +42,19 @@
   - 全元素 `box-sizing:border-box` + `max-width:100%`,固定宽 `w-24/w-36`(币种/日期框)改弹性,双视口(390px 真机 + 1024px 平板)实测**横向零溢出**。
 - **数据一致化(`effCompany()`)**:新增有效公司 helper —— 员工(手机端)演示员工 MY001 隶属马来西亚公司,所有数据源**强制锁 `my`**;其余角色回退各自选中公司(`S.company.id`),**零副作用**(sys_admin 仍用 sg)。统一改造的数据入口:报销记录 `/api/claims`、报销类型 `/api/claim_types`、模块数据 `/api/module/*`、家属 `/api/module/family`、提交报销、OCR、**AI 对话流 `/api/chat/stream`**。
 - **AI 助手数据与角色体系一致**:AI 对话的 `company` 参数改用 `effCompany()`,后端 orchestrator→reporting 按公司拉真实 claims/stats。实测员工问"报销情况",AI 引用的全是马来西亚真实数据(单号 CMY、货币 MYR、餐饮费限额 200 MYR),与前端报销页同一套规则,不再出现 SGD/CSG 串档。
+
+### 📷 AI 助手·对话式拍照识别(最新 · 第八波)
+让 AI 助手具备"拍照上传→视觉识别→自动填单"的对话式能力,真正 AI-Native:
+
+- **输入区相机按钮**:AI 抽屉输入框左侧新增 📷 按钮(`#ai-cam`),`capture="environment"` 调起后置摄像头/相册。随时可在对话里拍票据。
+- **对话式识别流程**(`aiOcrUpload`):
+  1. 用户气泡显示上传票据的**缩略图**;
+  2. AI "视觉识别中"动效;
+  3. 识别完成 → 复用 `/api/ocr`(真实 Vision 引擎,约 5s)→ 输出**票据识别结果卡片**(类型/商户/金额/日期);
+  4. 卡片底部「✨ 一键填入报销单」按钮 → `aiFillClaim()` 关闭抽屉、跳转 `my_claim` 自助报销页、自动回填表单字段并平滑滚动定位。
+- **主动递上传入口**(后端 `orchestrator._wants_upload`):当用户在对话里问"怎么报销/如何提交/能拍照吗/上传发票"等操作意图(中英文关键词识别),`run_turn` 在 SSE 流里追加 `upload_action` 卡片,前端渲染成醒目的"📷 拍照识别·自动填单"按钮卡片 —— 不止文字回答,直接把工具递到用户手上。
+- **新增卡片类型** `upload_action`(`renderAICard` 分支)+ i18n(`ai.cam_*` zh/en):cam_btn/cam_uploaded/cam_reading/cam_done/cam_card_title/cam_fill/cam_filled。
+- **货币一致**:识别卡片在手机端统一显示 RM,回填时遵循 `effCompany()` 锁定的马来西亚体系。
 - **移动导航**:底部 Tab(首页/报销/我的/AI)+ 虚拟路由 `__me`/`__payslip`,"我的"tab 在个人中心与薪资单详情间保持高亮;`go()` 拦截虚拟 nav 避免误入模块加载。
 
 ### 🧠 AI 老板驾驶舱 + AI 异常稽查(第四波 · 共享分析引擎)
@@ -314,7 +327,7 @@ pm2 logs claimgpt --nostream     # 查看日志
 - **状态**:✅ 运行中
 - **技术栈**:Python 3.13 + FastAPI + LangGraph 1.2.4 + TailwindCSS + Chart.js
 - **验证**:后端 18/18 模块 + 2集团 + 6角色 + 7国合规全绿;前端桌面+移动端零 JS 错误
-- **最后更新**:2026-06-17(六波迭代对齐 FRS:Wave1 业务流程引擎 + Wave2 薪资精度引擎(加班分级/按比例/HRDF/企业总成本) + Wave3 政府法定文件(CP39/SOCSO 8A/银行IBG/凭证分类账/LHDN审计) + ①④ AI 老板驾驶舱(实时大屏+AI解读为何涨了)+ AI 异常稽查(加班/薪资跳变/总成本突增+健康分,共享 analytics 引擎) + 员工自助门户「我的」手机端深度适配(个人中心+我的薪资单,/api/me/summary+/api/me/payslip+payslip.self_view) + 第六波:员工手机端「报销」页打通(mobileGo→my_claim、员工默认锁定马来西亚公司、全链路 RM 统一、self_claim 手机端样式优化、claim.st_posted i18n) + 第七波:数据一致化(effCompany() 统一所有数据源含 AI 对话流) + 手机端布局防溢出(强制单列/解除 grid min-width:auto/box-sizing,双视口零溢出))
+- **最后更新**:2026-06-17(六波迭代对齐 FRS:Wave1 业务流程引擎 + Wave2 薪资精度引擎(加班分级/按比例/HRDF/企业总成本) + Wave3 政府法定文件(CP39/SOCSO 8A/银行IBG/凭证分类账/LHDN审计) + ①④ AI 老板驾驶舱(实时大屏+AI解读为何涨了)+ AI 异常稽查(加班/薪资跳变/总成本突增+健康分,共享 analytics 引擎) + 员工自助门户「我的」手机端深度适配(个人中心+我的薪资单,/api/me/summary+/api/me/payslip+payslip.self_view) + 第六波:员工手机端「报销」页打通(mobileGo→my_claim、员工默认锁定马来西亚公司、全链路 RM 统一、self_claim 手机端样式优化、claim.st_posted i18n) + 第七波:数据一致化(effCompany() 统一所有数据源含 AI 对话流) + 手机端布局防溢出(强制单列/解除 grid min-width:auto/box-sizing,双视口零溢出) + 第八波:AI 助手对话式拍照识别(输入区相机按钮→aiOcrUpload 缩略图气泡+视觉识别动画+票据识别结果卡片+一键填入报销单;后端 _wants_upload 意图检测,用户问"怎么报销"时主动递上 upload_action 卡片))
 
 ## 🆕 Paydaes HR-Payroll 套件(Pro 方案 · 全量铺开)
 

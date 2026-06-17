@@ -80,6 +80,10 @@ const I18N = {
       thinking: '智能体团队协作思考中…', think_done: '思考完成',
       hello: '你好,我是', collab: '智能体团队协作',
       summon: '唤起 AI 智能体', give_to_ai: '交给AI',
+      cam_btn: '拍照/上传票据', cam_uploaded: '我上传了一张票据,帮我识别一下',
+      cam_reading: 'AI 视觉识别中,正在读取票据信息…', cam_done: '识别完成!',
+      cam_card_title: '票据识别结果', cam_fill: '一键填入报销单',
+      cam_filled: '✅ 已自动填入识别结果,核对后即可提交',
     },
     dashboard: {
       title: '工作台', trend: '报销趋势分析', todos: '待办事项',
@@ -241,6 +245,10 @@ const I18N = {
       thinking: 'Agent team collaborating…', think_done: 'Thinking done',
       hello: "Hi, I'm", collab: 'Agent team collaboration',
       summon: 'Summon AI Agents', give_to_ai: 'Ask AI',
+      cam_btn: 'Snap / Upload Receipt', cam_uploaded: 'I uploaded a receipt, please recognize it for me',
+      cam_reading: 'AI vision reading the receipt…', cam_done: 'Recognized!',
+      cam_card_title: 'Receipt Recognition', cam_fill: 'Fill claim form',
+      cam_filled: '✅ Auto-filled from recognition, review and submit',
     },
     dashboard: {
       title: 'Dashboard', trend: 'Expense Trend Analysis', todos: 'To-do List',

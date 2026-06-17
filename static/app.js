@@ -1178,10 +1178,93 @@ function acFlash(el, msg, isErr) {
   el.style.color = isErr ? '#ef4444' : '#10b981';
 }
 
+// ════════ AI 助手·对话式拍照识别 ════════
+// 暂存最近一次 AI 识别结果,供"一键填入报销单"复用
+let _aiLastOcr = null;
+async function aiOcrUpload(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = '';                 // 允许重复选同一文件
+  if (!file) return;
+  // 确保对话已初始化(若用户直接点相机而未发过消息)
+  if (!$('#ai-messages').dataset.init) { selectAgent(S.currentAgent); $('#ai-messages').dataset.init = '1'; }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const b64 = String(reader.result);
+    // 1) 用户气泡:显示上传的票据缩略图
+    $('#ai-messages').insertAdjacentHTML('beforeend',
+      `<div class="msg-user"><div class="bubble" style="padding:6px"><img src="${b64}" alt="票据" style="max-width:160px;border-radius:9px;display:block"><div class="text-xs opacity-80 mt-1">${t('ai.cam_uploaded')}</div></div></div>`);
+    aiScroll();
+    // 2) AI 识别中动效
+    const tid = 'ocr' + Date.now();
+    $('#ai-messages').insertAdjacentHTML('beforeend',
+      `<div class="msg-ai"><span class="text-lg mt-0.5">${(S.currentAgent && S.currentAgent.emoji) || '🤖'}</span><div class="flex-1"><div class="think-box" id="${tid}"><div class="text-slate-400"><span class="think-dot">●</span> ${t('ai.cam_reading')}</div></div></div></div>`);
+    aiScroll();
+    try {
+      const r = await api('/api/ocr', { company: effCompany(), image_b64: b64, mime: file.type || 'image/jpeg' });
+      const ext = r.extracted || {};
+      _aiLastOcr = ext;
+      const note = (r.engine_note && (S.lang === 'en' ? r.engine_note.en : r.engine_note.zh)) || '';
+      const tn = typeNameByCode(ext.type_code) || ext.category || '-';
+      // 3) 识别结果卡片 + 一键填入按钮
+      const rows = [
+        [t('claim.f_type'), tn],
+        [t('claim.f_merchant'), ext.merchant || '-'],
+        [t('claim.f_amount'), (ext.amount != null ? ext.amount : '-') + ' ' + (isMobileMode() ? 'RM' : (ext.currency || 'RM'))],
+        [t('claim.f_date'), ext.date || '-'],
+      ].map(([k, v]) => `<div class="flex justify-between py-0.5"><span class="text-slate-400">${k}</span><b>${v}</b></div>`).join('');
+      const cid = 'aiocr' + Date.now();
+      $('#' + tid).closest('.msg-ai').remove();
+      $('#ai-messages').insertAdjacentHTML('beforeend',
+        `<div class="msg-ai"><span class="text-lg mt-0.5">${(S.currentAgent && S.currentAgent.emoji) || '🤖'}</span><div class="flex-1 space-y-2">
+          <div class="bubble">${(r.engine === 'vision' ? '✅ ' : 'ℹ️ ')}${esc(note)} —— ${t('ai.cam_done')}</div>
+          <div class="ai-card" id="${cid}"><div class="ai-card-head"><i class="fas fa-receipt text-teal-500"></i> ${t('ai.cam_card_title')}</div>
+            <div class="ai-card-body">${rows}
+              <button class="btn btn-primary w-full justify-center mt-3" onclick="aiFillClaim()"><i class="fas fa-wand-magic-sparkles"></i> ${t('ai.cam_fill')}</button>
+            </div></div></div></div>`);
+      aiScroll();
+    } catch (e) {
+      const box = $('#' + tid);
+      if (box) box.innerHTML = `<div class="text-rose-400"><i class="fas fa-triangle-exclamation"></i> ${t('claim.ocr_err')}</div>`;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+// 一键:跳到自助报销页并把 AI 识别结果回填进表单
+function aiFillClaim() {
+  if (!_aiLastOcr) return;
+  const ext = _aiLastOcr;
+  toggleAI(false);
+  // 进入自助报销模块(员工→my_claim)
+  if (isMobileMode()) { mobileGo('my_claim'); } else { go('my_claim'); }
+  // 等模块渲染完成再回填(loadClaimTypes 异步拉下拉项)
+  setTimeout(() => {
+    const set = (id, v) => { const e = document.getElementById(id); if (e && v != null && v !== '') e.value = v; };
+    set('cf-type', ext.type_code);
+    set('cf-merchant', ext.merchant);
+    set('cf-amount', ext.amount);
+    if (!isMobileMode()) set('cf-currency', ext.currency);
+    set('cf-date', ext.date);
+    if (ext.tax_no) set('cf-receipt', ext.tax_no);
+    const fb = document.getElementById('cf-feedback');
+    if (fb) acFlash(fb, t('ai.cam_filled'), false);
+    const drop = document.getElementById('ocr-drop');
+    if (drop) drop.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 700);
+}
+// 按 type_code 找类型名(回填卡片展示用)
+function typeNameByCode(code) {
+  if (!code) return '';
+  const sel = document.getElementById('cf-type');
+  if (sel) { const o = [...sel.options].find(x => x.value === code); if (o) return o.textContent.replace(/\s*\(.*\)$/, ''); }
+  return code;
+}
+
 window.loadClaimTypes = loadClaimTypes;
 window.refreshClaims = refreshClaims;
 window.submitClaim = submitClaim;
 window.ocrUpload = ocrUpload;
+window.aiOcrUpload = aiOcrUpload;
+window.aiFillClaim = aiFillClaim;
 
 // ════════ 东南亚多国合规中心 ════════
 async function renderCompliance() {
@@ -1641,6 +1724,12 @@ function renderAICard(card) {
   else if (card.type === 'table') body = `<table class="dtable" style="font-size:11.5px">${d.headers ? `<thead><tr>${d.headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>` : ''}<tbody>${d.rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   else if (card.type === 'family') body = (d.members || []).map(m => `<div class="py-0.5"><i class="fas fa-user text-slate-300"></i> ${m.relation}: <b>${m.name}</b></div>`).join('');
   else if (card.type === 'report') body = (d.options || []).map(o => `<div class="py-1 text-teal-600"><i class="fas fa-file-export"></i> ${o}</div>`).join('');
+  else if (card.type === 'upload_action') {
+    const hint = S.lang === 'en' ? (d.hint_en || d.hint) : d.hint;
+    const btn = S.lang === 'en' ? (d.btn_en || d.btn) : d.btn;
+    body = `<div class="text-sm text-slate-500 mb-3 leading-relaxed">${esc(hint || '')}</div>
+      <button class="btn btn-primary w-full justify-center" onclick="document.getElementById('ai-cam-file').click()"><i class="fas fa-camera"></i> ${esc(btn || t('ai.cam_btn'))}</button>`;
+  }
   else body = `<pre style="font-size:11px">${esc(JSON.stringify(d))}</pre>`;
   const cid = 'aicard' + Date.now();
   $('#ai-messages').insertAdjacentHTML('beforeend',
