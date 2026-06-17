@@ -446,11 +446,55 @@ _DESC_EN = {
 }
 
 
+# 字段标签双语词典(源 label 为英文 → 中文)。落库 key 始终用英文(label_key),
+# 保证多语言下持久化键一致。前端 pField 已支持 label_key/label_en。
+_FIELD_ZH = {
+    "Allow Half Day": "允许半天", "BIC / SWIFT": "BIC / SWIFT 代码",
+    "Bank Code": "银行代码", "Bank Name": "银行名称",
+    "Chartfield 1 (Entity)": "核算字段1(实体)", "Chartfield 2 (Dept)": "核算字段2(部门)",
+    "Chartfield 3 (Project)": "核算字段3(项目)", "Chartfield 4 (Cost Center)": "核算字段4(成本中心)",
+    "Chartfield 5 (Account)": "核算字段5(科目)", "Chartfield 6 (Future)": "核算字段6(预留)",
+    "Company Code": "公司代码", "Country": "国家", "Country Code": "国家代码",
+    "Day Type": "日期类型", "Default Entitlement Day(s)": "默认权益天数",
+    "Effective Date": "生效日期", "End Time": "结束时间",
+    "Entitlement Code": "权益代码", "Entitlement Name": "权益名称",
+    "Flexible Shift": "弹性班次", "Form": "表单", "From Tax Year": "起始税务年度",
+    "Gender Restriction": "性别限制", "Grace for Late": "迟到宽限",
+    "Group Code": "分组代码", "Leave Code": "假期代码", "Leave Name": "假期名称",
+    "Location Address": "地点地址", "Location Name": "地点名称",
+    "Maximum Radius": "最大半径", "Min. OT Block": "最小加班时段",
+    "Min. Service (months)": "最低服务期(月)", "Monthly Overtime Maximum Hours": "每月加班上限(小时)",
+    "Paid Leave": "带薪假期", "Postcode": "邮编",
+    "Replacement Leave Conversion": "补休折算", "Same for all employee": "全员一致",
+    "Schedule Group Code": "排班组代码", "Shift Code": "班次代码",
+    "Shift Description": "班次说明", "Start Time": "开始时间", "State": "州/省",
+    "Status": "状态", "Tax Category": "税务类别", "Tax Year": "税务年度", "Year": "年度",
+}
+def _localize_field(f: dict, lang: str) -> dict:
+    """翻译单个字段的 label(显示), 并写入 label_key(英文,落库稳定)/label_en。
+    注意: opts/value 是枚举数据, 跨语言保持英文统一(避免落库/回显键漂移),
+    仅 label 做显示层翻译。"""
+    nf = dict(f)
+    raw = nf.get("label", "")
+    nf["label_key"] = raw          # 英文原文 → 落库 key
+    nf["label_en"] = raw
+    if lang == "zh":
+        nf["label"] = _FIELD_ZH.get(raw, raw)
+    else:
+        nf["label"] = raw
+    return nf
+
+
 def _localize_module(mod: dict, module_id: str, lang: str) -> dict:
-    """按语言本地化模块的 domain / desc / actions(title 双语共显不动)"""
-    if lang != "en":
-        return mod
+    """按语言本地化模块的 domain / desc / actions / 字段标签(title 双语共显不动)。
+    中文模式翻译字段为中文, 英文模式保持英文; 落库 key 始终英文。"""
     m = dict(mod)
+    # 字段标签双语(两种语言都处理, 以注入 label_key/label_en)
+    for fk in ("fields", "header_fields"):
+        if m.get(fk):
+            m[fk] = [_localize_field(f, lang) for f in m[fk]]
+    if lang != "en":
+        return m
     if m.get("domain") in _DOMAIN_EN:
         m["domain"] = _DOMAIN_EN[m["domain"]]
     if module_id in _DESC_EN:

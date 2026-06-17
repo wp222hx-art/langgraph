@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.core.orchestrator import run_turn
-from app.core import llm_gateway, permissions, telemetry
+from app.core import llm_gateway, permissions, telemetry, formula_engine
 from app.data import enterprise, navigation, paydaes_modules, db, calc
 
 app = FastAPI(title="Paydaes ClaimGPT", version="3.0")
@@ -139,6 +139,19 @@ class ModuleRecordReq(BaseModel):
     module_id: str
     company: str = "sg"
     payload: dict = {}
+    role: str = "hr_admin"
+
+
+class FormulaEvalReq(BaseModel):
+    formula: str = ""
+    variables: dict = {}
+
+
+class ModuleFormReq(BaseModel):
+    """整表单保存(p_detail / p_formula / p_tabset) —— 按 module+company upsert。"""
+    module_id: str
+    company: str = "sg"
+    form: dict = {}             # {字段label: 值, ...} + 可含 _formula
     role: str = "hr_admin"
 
 
@@ -295,6 +308,27 @@ def delete_module_record(rid: int, company: str = "sg", role: str = "hr_admin"):
     if not permissions.can(role, "module_record.delete"):
         return permissions.deny_payload(role, "module_record.delete")
     return {"ok": db.delete_module_record(rid, company)}
+
+
+@app.post("/api/formula/eval")
+def formula_eval(req: FormulaEvalReq):
+    """公式真实计算 —— 解析并求值, 返回结果或错误(可解释)。"""
+    return formula_engine.evaluate(req.formula, req.variables)
+
+
+@app.post("/api/module_form")
+def save_module_form(req: ModuleFormReq):
+    """保存整表单(p_detail/p_formula/p_tabset) —— 按 module+company upsert, 真落库。"""
+    if not permissions.can(req.role, "module_record.create"):
+        return permissions.deny_payload(req.role, "module_record.create")
+    rec = db.upsert_module_form(req.module_id, req.company, req.form)
+    return {"ok": True, "record": rec}
+
+
+@app.get("/api/module_form/{module_id}")
+def get_module_form(module_id: str, company: str = "sg"):
+    """取某模块在某公司已保存的表单(用于加载回显)。"""
+    return {"form": db.get_module_form(module_id, company)}
 
 
 @app.get("/api/claims")

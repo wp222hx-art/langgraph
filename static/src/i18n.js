@@ -106,6 +106,7 @@ const I18N = {
       high: '高', mid: '中', low: '低',
       passed: '✅ 通过', risk_level: '风险等级', check: '校验',
       saving: '保存中', saved: '已保存', save_ok: '配置已保存(演示)',
+      save_ok2: '已保存到', save_fail: '保存失败(权限不足?)',
       no_data: '无匹配数据', open: '打开', empty: '(空)', remove: '移除',
       pick_first: '请先选中一项', tab_empty: '该分组暂无更多配置项',
       page: '第', page_unit: '页',
@@ -276,6 +277,7 @@ const I18N = {
       high: 'High', mid: 'Medium', low: 'Low',
       passed: '✅ Passed', risk_level: 'Risk Level', check: 'Validation',
       saving: 'Saving', saved: 'Saved', save_ok: 'Configuration saved (demo)',
+      save_ok2: 'Saved to', save_fail: 'Save failed (no permission?)',
       no_data: 'No matching data', open: 'Open', empty: '(empty)', remove: 'Remove',
       pick_first: 'Please select an item first', tab_empty: 'No more settings in this group',
       page: 'Page', page_unit: '',
@@ -398,7 +400,89 @@ window.setLang = setLang;
 window.getLang = getLang;
 window.onLangChange = onLangChange;
 
+// ═══════════════════════════════════════════════════════════
+//  字段标签词典(EN → ZH) —— Paydaes 模块字段中文化
+//  后端字段统一以英文 label 定义,前端中文模式下经此表翻译。
+// ═══════════════════════════════════════════════════════════
+const FIELD_ZH = {
+  // 通用
+  'Status': '状态', 'Country': '国家', 'Country Code': '国家代码',
+  'Effective Date': '生效日期', 'Year': '年度', 'State': '州/省',
+  'Postcode': '邮编', 'Form': '表单', 'Company Code': '公司代码',
+  'Same for all employee': '所有员工统一', 'Same for all employees': '所有员工统一',
+  // 假期管理
+  'Leave Code': '假期代码', 'Leave Name': '假期名称', 'Paid Leave': '带薪假',
+  'Day Type': '日期类型', 'Allow Half Day': '允许半天',
+  'Default Entitlement Day(s)': '默认额度(天)', 'Entitlement Code': '额度代码',
+  'Entitlement Name': '额度名称', 'Gender Restriction': '性别限制',
+  'Min. Service (months)': '最低司龄(月)', 'Group Code': '分组代码',
+  'Replacement Leave Conversion': '调休折算', 'Leave Group': '假期组',
+  'Leave Type': '假期类型',
+  // 考勤管理
+  'Shift Code': '班次代码', 'Shift Name': '班次名称',
+  'Shift Description': '班次说明', 'Start Time': '开始时间', 'End Time': '结束时间',
+  'Flexible Shift': '弹性班次', 'Grace for Late': '迟到宽限',
+  'Schedule Group Code': '排班组代码', 'Min. OT Block': '最小加班单元',
+  'Monthly Overtime Maximum Hours': '月加班上限(小时)',
+  'Location Name': '地点名称', 'Location Address': '地点地址',
+  'Maximum Radius': '最大半径', 'GPS Coordinate': 'GPS 坐标',
+  // 税务合规
+  'Tax Category': '税务类别', 'Tax Year': '税务年度',
+  'From Tax Year': '起始税年', 'BIC / SWIFT': 'BIC / SWIFT',
+  // 财务做账 / 银行
+  'Bank Code': '银行代码', 'Bank Name': '银行名称',
+  'Chartfield 1 (Entity)': '科目字段1(实体)', 'Chartfield 2 (Dept)': '科目字段2(部门)',
+  'Chartfield 3 (Project)': '科目字段3(项目)', 'Chartfield 4 (Cost Center)': '科目字段4(成本中心)',
+  'Chartfield 5 (Account)': '科目字段5(科目)', 'Chartfield 6 (Future)': '科目字段6(预留)',
+  'GL Account': '总账科目', 'Account Code': '科目代码', 'Account Name': '科目名称',
+  'Element Group': '薪资元素组', 'Element Code': '元素代码',
+  // 子 Tab / 穿梭框常见标题
+  'General': '常规', 'Settings': '设置', 'Advanced': '高级',
+  'Accounting': '会计', 'Mapping': '映射', 'Rules': '规则',
+  '可选项': '可选项', '已选项': '已选项',
+  // 列表/表格列头
+  'Account Name': '科目名称', 'Account Type': '科目类型', 'Amount': '金额',
+  'Bank Identifier Code': '银行识别码', 'Bank Table': '银行表', 'Branch Table': '分行表',
+  'COA Mapping': '科目表映射', 'COA Remapping': '科目重映射',
+  'Chargeable Income From': '应税收入起点', 'Chartfields Details': '科目字段明细',
+  'Code': '代码', 'Cumulative Tax': '累计税额', 'Date': '日期',
+  'Department': '部门', 'Employee': '员工', 'Employee ID': '员工编号',
+  'Exemption / Deduction Item': '免税/扣除项', 'GL Account No': '总账科目号',
+  'Gazetted PH': '法定公假', 'Holiday Name': '假日名称', 'Leave Reason': '请假事由',
+  'Month': '月份', 'Name': '名称', 'No': '序号', 'Overtime Type': '加班类型',
+  'Per Claim': '每次申报', 'Rate (%)': '税率(%)', 'Receipt No': '收据号',
+  'Receipt Type': '收据类型', 'Required?': '是否必填', 'Time&Attendance': '考勤',
+  'To': '至', 'Type': '类型', 'Unit': '单位', 'Value': '数值',
+  'Variable Code': '变量代码', 'Variable Type': '变量类型',
+  'Tax Receipt': '税务收据',
+  // 穿梭框/分组标题(中文原文保持,英文环境下走 fieldLabel 仅 zh 模式生效,这里仅为完整登记)
+  '关联要素': '关联要素', '可选 Earnings 要素': '可选 Earnings 要素', '可选要素': '可选要素',
+  '基础设置': '基础设置', '审批流': '审批流', '已加入分组': '已加入分组',
+  '扣减规则': '扣减规则', '限制条件': '限制条件',
+};
+// 带 {cur} / 括号单位的列头前缀翻译表
+const FIELD_ZH_PREFIX = [
+  ['Annual Limit', '年度上限'], ['Cumulative Tax', '累计税额'],
+  ['Chargeable Income', '应税收入'], ['Rate (', '税率('],
+];
+
+// 翻译字段标签:中文模式查表,查不到原样返回(英文)
+function fieldLabel(en) {
+  if (_lang !== 'zh') return en;
+  if (en == null) return en;
+  const s = String(en).trim();
+  if (FIELD_ZH[en]) return FIELD_ZH[en];
+  if (FIELD_ZH[s]) return FIELD_ZH[s];
+  // 带货币/单位占位的列头,如 "Annual Limit (MYR)" → "年度上限 (MYR)"
+  for (const [pre, zh] of FIELD_ZH_PREFIX) {
+    if (s.startsWith(pre)) return zh + s.slice(pre.length);
+  }
+  return en;
+}
+
 // 启动即同步 <html lang>,确保首屏语言标记与当前语言一致(默认英文)
 document.documentElement.lang = _lang === 'zh' ? 'zh-CN' : _lang;
 window.applyI18n = applyI18n;
 window.I18N = I18N;
+window.FIELD_ZH = FIELD_ZH;
+window.fieldLabel = fieldLabel;

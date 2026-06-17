@@ -327,8 +327,28 @@ async function renderDashboard() {
 }
 
 // ════════ 18 模块工作区 ════════
+// 取该模块在当前公司已保存的表单,回填到字段定义(实现"保存→重载回显"闭环)
+async function mergeSavedForm(m, navId) {
+  const res = await api(`/api/module_form/${navId}?company=${effCompany()}`);
+  const form = res && res.form;
+  if (!form || !Object.keys(form).length) return;
+  const apply = (fields) => (fields || []).forEach(f => {
+    const key = f.label_key || f.label_en || f.label;
+    if (key in form && form[key] != null) f.value = form[key];
+  });
+  apply(m.fields); apply(m.header_fields);
+  if (form._formula) m.formula = form._formula;
+  if (form._selected) m.right = form._selected;
+  if (form._available) m.left = form._available;
+  if (form['GPS Coordinate']) m.coord = form['GPS Coordinate'];
+  m._restored = true;     // 标记已回显(可用于角标提示)
+}
 async function renderModule(navId) {
   const m = await fetch(`/api/module/${navId}?company=${effCompany()}&lang=${S.lang}`).then(r => r.json());
+  // 加载回显:把该公司已保存的表单值合并回字段(按 label_en/label_key 匹配)
+  if (['p_detail', 'p_tabset', 'p_shuttle', 'p_formula', 'p_map'].includes(m.layout)) {
+    try { await mergeSavedForm(m, navId); } catch (e) { /* 无已存数据则跳过 */ }
+  }
   S.curModule = m;                       // 暂存当前模块(供 CRUD 模态框读取字段定义)
   window.__crud = m.crud || null;
   const crudAction = m.crud ? m.crud.action : null;
@@ -1811,10 +1831,13 @@ function topTabsBar(m) {
 // 单个表单字段渲染(全部真可编辑:ro 禁用,其余 input/select/radio 真控件)
 function pField(f, idx) {
   const req = f.req ? '<span class="text-rose-500">*</span>' : '';
-  const lbl = `<label class="pf-label">${f.label} ${req}</label>`;
+  const dispLabel = (typeof fieldLabel === 'function') ? fieldLabel(f.label_en || f.label) : (f.label_en || f.label);
+  const lbl = `<label class="pf-label">${dispLabel} ${req}</label>`;
   let ctrl = '';
   const unit = f.unit ? `<span class="pf-unit">${f.unit}</span>` : '';
-  const fid = idx != null ? `data-pf="${idx}"` : '';
+  // data-label 用原始(英文)label 作为落库 key,保证多语言下 key 一致
+  const keyLabel = f.label_key || f.label_en || f.label || '';
+  const fid = (idx != null ? `data-pf="${idx}" ` : '') + `data-label="${esc(keyLabel)}"`;
   if (f.type === 'ro')
     ctrl = `<input class="pf-input pf-ro" value="${esc(f.value)}" disabled>`;
   else if (f.type === 'dd')
@@ -1870,6 +1893,57 @@ function pfSaveDefault(btn) {
 }
 window.pfSaveDefault = pfSaveDefault;
 
+// 从页面收集所有带 data-label 的控件值 → form{label: value}
+function collectHeaderInto(form, root) {
+  const scope = root || document;
+  scope.querySelectorAll('[data-label]').forEach(el => {
+    const key = el.getAttribute('data-label');
+    if (!key) return;
+    let val;
+    if (el.classList.contains('pf-radiogrp')) {
+      const a = el.querySelector('.pf-radio.active');
+      val = a ? a.textContent.trim() : '';
+    } else if (el.tagName === 'SELECT' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+      val = el.value;
+    } else { return; }
+    form[key] = val;
+  });
+  return form;
+}
+function collectForm(root) { return collectHeaderInto({}, root); }
+window.collectForm = collectForm;
+
+// 真实保存表单到后端(按 module+company upsert 落库) + 反馈
+async function pfSaveForm(btn, moduleId, form) {
+  const old = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${t('common.saving') || '保存中'}`;
+  try {
+    const r = await api('/api/module_form', {
+      module_id: moduleId, company: effCompany(), form: form, role: (S.role && S.role.id) || 'hr_admin'
+    });
+    if (r && r.ok) {
+      btn.innerHTML = `<i class="fas fa-check"></i> ${t('common.saved') || '已保存'}`;
+      toast((t('common.save_ok2') || '已保存到') + ' ' + (S.company ? nameOf(S.company) : effCompany()));
+    } else {
+      btn.innerHTML = old; btn.disabled = false;
+      toast((r && r.message) || (t('common.save_fail') || '保存失败(权限不足?)'), true);
+      return;
+    }
+  } catch (e) {
+    btn.innerHTML = old; btn.disabled = false;
+    toast(t('common.save_fail') || '保存失败', true); return;
+  }
+  setTimeout(() => { btn.disabled = false; btn.innerHTML = old; }, 1400);
+}
+window.pfSaveForm = pfSaveForm;
+
+// 通用:p_detail/p_tabset 的保存(收集整页 data-label)
+function pfSaveCollect(btn) {
+  const mid = (S.curModule && S.curModule.id) || S.currentNav;
+  pfSaveForm(btn, mid, collectForm());
+}
+window.pfSaveCollect = pfSaveCollect;
+
 // 分页器 < 1 2 3 >(可点击)
 function pPager(pages = 3, cur = 1, onPage) {
   const cb = onPage || 'pfPagerToast';
@@ -1885,7 +1959,7 @@ window.pfPagerToast = pfPagerToast;
 function pDetailView(m) {
   return `<div class="panel p-5 md:p-6">
     ${pFieldGrid(m.fields || [])}
-    ${pFooter()}
+    ${pFooter(t('common.save'), 'pfSaveCollect(this)')}
   </div>`;
 }
 
@@ -1964,12 +2038,12 @@ function pInlineView(m) {
   const head = m.header_fields ? `<div class="mb-5"><div class="pf-grid">${m.header_fields.map(f => {
     if (f.label === 'Tax Category' && m.brackets_all) {
       const opts = (f.opts || []).map(o => `<option ${o === f.value ? 'selected' : ''}>${esc(o)}</option>`).join('');
-      return `<div class="pf-cell"><label class="pf-label">${f.label} <span class="text-rose-500">*</span></label>
+      return `<div class="pf-cell"><label class="pf-label">${fieldLabel(f.label)} <span class="text-rose-500">*</span></label>
         <select class="pf-input pf-realselect" onchange="inlineSwitchCategory(this)">${opts}</select></div>`;
     }
     return pField(f);
   }).join('')}</div></div>` : '';
-  const cols = (m.columns || []).map(c => `<th>${c}</th>`).join('') + `<th class="text-right">${t('common.action')}</th>`;
+  const cols = (m.columns || []).map(c => `<th>${fieldLabel(c)}</th>`).join('') + `<th class="text-right">${t('common.action')}</th>`;
   return `<div class="panel p-5 md:p-6">
     ${head}
     <div class="table-wrap"><table class="dtable">
@@ -1985,9 +2059,9 @@ let _listState = null;
 function pListView(m) {
   _listState = { all: (m.rows || []).map(r => r.slice()), cols: m.columns || [] };
   const filters = (m.filters || []).map((f, i) =>
-    `<div class="pf-cell"><label class="pf-label">${f}</label>
+    `<div class="pf-cell"><label class="pf-label">${fieldLabel(f)}</label>
       <input class="pf-input" id="lst-f${i}" placeholder="${t('common.all') || '全部'}" oninput="pListSearch()"></div>`).join('');
-  const cols = (m.columns || []).map(c => `<th>${c}</th>`).join('');
+  const cols = (m.columns || []).map(c => `<th>${fieldLabel(c)}</th>`).join('');
   const filterPanel = filters ? `<div class="panel p-4 mb-4">
     <div class="flex items-end gap-3 flex-wrap">
       <div class="flex-1 grid grid-cols-2 md:grid-cols-3 gap-3">${filters}</div>
@@ -2034,7 +2108,7 @@ function pShuttleView(m) {
     ${head}
     <div class="shuttle-wrap">
       <div class="shuttle-col">
-        <div class="shuttle-title">${m.shuttle_left_title || '可选项'}</div>
+        <div class="shuttle-title">${fieldLabel(m.shuttle_left_title || '可选项')}</div>
         <div class="shuttle-body" id="shuttle-left">${shuttleList('l')}</div>
       </div>
       <div class="shuttle-arrows">
@@ -2042,13 +2116,22 @@ function pShuttleView(m) {
         <button class="shuttle-arrow" onclick="shuttleMove('l')" title="${t('common.remove') || '移除'}"><i class="fas fa-angle-left"></i></button>
       </div>
       <div class="shuttle-col">
-        <div class="shuttle-title">${m.shuttle_right_title || '已选项'}</div>
+        <div class="shuttle-title">${fieldLabel(m.shuttle_right_title || '已选项')}</div>
         <div class="shuttle-body" id="shuttle-right">${shuttleList('r')}</div>
       </div>
     </div>
-    ${pFooter()}
+    ${pFooter(t('common.save'), 'pfSaveShuttle(this)')}
   </div>`;
 }
+// p_shuttle 保存:把"已选"列表 + header 字段一起落库
+function pfSaveShuttle(btn) {
+  const form = {};
+  collectHeaderInto(form);
+  if (_shuttleState) { form._selected = _shuttleState.right.slice(); form._available = _shuttleState.left.slice(); }
+  const mid = (S.curModule && S.curModule.id) || S.currentNav;
+  pfSaveForm(btn, mid, form);
+}
+window.pfSaveShuttle = pfSaveShuttle;
 function shuttleList(side) {
   const items = side === 'l' ? _shuttleState.left : _shuttleState.right;
   const sel = _shuttleState.sel[side];
@@ -2083,22 +2166,38 @@ function shuttleMoveItem(side, i) {
 }
 window.shuttleMoveItem = shuttleMoveItem;
 
-// ⑤ Formula 公式编辑器(可编辑 + 点变量插入)
+// ⑤ Formula 公式编辑器(可编辑 + 点变量插入 + 后端真实试算 + 真落库)
+let _fxModule = null;
 function pFormulaView(m) {
+  _fxModule = m;
   const head = m.header_fields ? `<div class="mb-5">${pFieldGrid(m.header_fields)}</div>` : '';
   const defaultVars = ['HR.GENDER', 'HR.MARITAL', 'SERVICE.YEARS', 'ENTITLEMENT.DAYS', 'IF()', 'AND', 'OR'];
   const vars = (m.formula_vars && m.formula_vars.length ? m.formula_vars : defaultVars)
     .map(v => `<span class="fx-var" data-tok="${esc(v)}" onclick="fxInsertEl(this)">${esc(v)}</span>`).join('');
   const defaultFormula = "IF(HR.GENDER='M' AND HR.MARITAL='married',\n   ENTITLEMENT.DAYS + 3,\n   ENTITLEMENT.DAYS)";
+  // 示例变量上下文(可编辑) —— 来自后端 sample_context 或模块自带
+  const sample = m.formula_sample || { 'HR.GENDER': 'M', 'HR.MARITAL': 'married', 'SERVICE.YEARS': 6, 'ENTITLEMENT.DAYS': 14 };
+  const varRows = Object.keys(sample).map(k =>
+    `<div class="fx-var-row"><span class="fx-var-k">${esc(k)}</span>
+      <input class="fx-var-v" data-vk="${esc(k)}" value="${esc(String(sample[k]))}"></div>`).join('');
+  const flabel = S.lang === 'en' ? 'Eligibility Formula' : '资格公式';
   return `<div class="panel p-5 md:p-6">
     ${head}
     <div class="flex items-center justify-between mb-2">
-      <label class="pf-label mb-0">Eligibility Formula <span class="text-rose-500">*</span></label>
+      <label class="pf-label mb-0">${flabel} <span class="text-rose-500">*</span></label>
       <button class="btn btn-ai text-xs py-1" onclick="openAI('HRStrategist','把这条假期资格规则翻译成公式')"><i class="fas fa-wand-magic-sparkles"></i> ${S.lang === 'en' ? 'NL→Formula' : '自然语言生成公式'}</button>
     </div>
     <textarea class="fx-editor fx-editable" id="fx-area" spellcheck="false">${esc(m.formula || defaultFormula)}</textarea>
     <div class="fx-toolbar">${vars}</div>
-    ${pFooter(t('common.save'), 'fxValidate(this)')}
+    <div class="fx-testpanel">
+      <div class="fx-test-head"><i class="fas fa-flask"></i> ${S.lang === 'en' ? 'Test Variables' : '试算变量'}</div>
+      <div class="fx-var-grid">${varRows}</div>
+      <div class="flex items-center gap-3 mt-3">
+        <button class="btn btn-secondary text-sm" onclick="fxEval(this)"><i class="fas fa-play"></i> ${S.lang === 'en' ? 'Run Test' : '运行试算'}</button>
+        <div id="fx-result" class="fx-result"></div>
+      </div>
+    </div>
+    ${pFooter(t('common.save'), 'fxSave(this)')}
   </div>`;
 }
 function fxInsert(token) {
@@ -2111,14 +2210,57 @@ function fxInsert(token) {
 function fxInsertEl(el) { fxInsert(el.getAttribute('data-tok') || el.textContent || ''); }
 window.fxInsert = fxInsert;
 window.fxInsertEl = fxInsertEl;
-function fxValidate(btn) {
-  const ta = document.getElementById('fx-area');
-  const txt = (ta && ta.value) || '';
-  const open = (txt.match(/\(/g) || []).length, close = (txt.match(/\)/g) || []).length;
-  if (open !== close) { toast(t('fx.bracket_err') || '括号不匹配，请检查公式', true); return; }
-  pfSaveDefault(btn);
+// 收集试算变量(自动把数字字符串转 number,true/false 转布尔)
+function fxCollectVars() {
+  const vars = {};
+  document.querySelectorAll('.fx-var-v').forEach(inp => {
+    const k = inp.getAttribute('data-vk'); let v = inp.value.trim();
+    if (/^-?\d+(\.\d+)?$/.test(v)) v = parseFloat(v);
+    else if (v.toLowerCase() === 'true') v = true;
+    else if (v.toLowerCase() === 'false') v = false;
+    vars[k] = v;
+  });
+  return vars;
 }
-window.fxValidate = fxValidate;
+// 真实后端试算
+async function fxEval(btn) {
+  const ta = document.getElementById('fx-area');
+  const box = document.getElementById('fx-result');
+  if (!ta || !box) return;
+  const old = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i>`;
+  try {
+    const r = await api('/api/formula/eval', { formula: ta.value, variables: fxCollectVars() });
+    if (r.ok) {
+      box.className = 'fx-result fx-ok';
+      box.innerHTML = `<i class="fas fa-check-circle"></i> ${S.lang === 'en' ? 'Result' : '结果'}: <b>${esc(String(r.result))}</b> <span class="fx-type">(${r.type})</span>`;
+    } else {
+      box.className = 'fx-result fx-err';
+      box.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${esc(r.error || (S.lang === 'en' ? 'Error' : '错误'))}`;
+    }
+  } catch (e) {
+    box.className = 'fx-result fx-err';
+    box.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${S.lang === 'en' ? 'Request failed' : '请求失败'}`;
+  }
+  btn.disabled = false; btn.innerHTML = old;
+}
+window.fxEval = fxEval;
+// 保存公式(先后端校验语法,通过才真落库)
+async function fxSave(btn) {
+  const ta = document.getElementById('fx-area');
+  if (!ta) return;
+  // 先用一次 eval 验证语法(变量缺失不算致命,只拦语法/括号错误)
+  const chk = await api('/api/formula/eval', { formula: ta.value, variables: fxCollectVars() });
+  if (!chk.ok && /括号|语法|bracket|syntax/i.test(chk.error || '')) {
+    toast(chk.error, true); return;
+  }
+  const form = {};
+  document.querySelectorAll('[data-pf]').forEach(el => { /* header 字段 */ });
+  form._formula = ta.value;
+  if (_fxModule) collectHeaderInto(form);
+  pfSaveForm(btn, (_fxModule && _fxModule.id) || S.currentNav, form);
+}
+window.fxSave = fxSave;
 
 // ⑥ 地图定位框(图钉可拖动 + 坐标实时回填)
 function pMapView(m) {
@@ -2128,7 +2270,7 @@ function pMapView(m) {
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div>${pFieldGrid(m.fields || [])}
         <div class="pf-cell mt-1"><label class="pf-label">${t('map.coord') || '坐标 (拖图钉自动更新)'}</label>
-          <input class="pf-input pf-ro" id="map-coord" value="3.139003, 101.686855" disabled></div>
+          <input class="pf-input pf-ro" id="map-coord" data-label="GPS Coordinate" value="${esc(m.coord || '3.139003, 101.686855')}" readonly></div>
       </div>
       <div>
         <label class="pf-label">Map <span class="text-rose-500">*</span></label>
@@ -2140,7 +2282,7 @@ function pMapView(m) {
         </div>
       </div>
     </div>
-    ${pFooter()}
+    ${pFooter(t('common.save'), 'pfSaveCollect(this)')}
   </div>`;
 }
 function initMapDrag() {
@@ -2169,16 +2311,19 @@ function pTabsetView(m) {
   const fields = m.fields || [];
   // 字段按 tab 数量均分到各子 Tab
   const per = Math.ceil(fields.length / subs.length) || 1;
-  _tabsetState = { subs, groups: subs.map((s, i) => fields.slice(i * per, (i + 1) * per)), active: 0 };
-  const tabs = subs.map((tb, i) => `<div class="ptab2 ${i === 0 ? 'active' : ''}" onclick="tabsetSwitch(${i})">${tb}</div>`).join('');
+  _tabsetState = { subs, groups: subs.map((s, i) => fields.slice(i * per, (i + 1) * per)), active: 0, form: {} };
+  const tabs = subs.map((tb, i) => `<div class="ptab2 ${i === 0 ? 'active' : ''}" onclick="tabsetSwitch(${i})">${fieldLabel(tb)}</div>`).join('');
   return `<div class="panel p-5 md:p-6">
     <div class="ptab2-bar">${tabs}</div>
     <div id="tabset-body">${pFieldGrid(_tabsetState.groups[0])}</div>
-    ${pFooter()}
+    ${pFooter(t('common.save'), 'pfSaveTabset(this)')}
   </div>`;
 }
 function tabsetSwitch(i) {
   if (!_tabsetState) return;
+  // 切走前先把当前 tab 的输入累积到内存 form,避免切 tab 丢数据
+  const body0 = document.getElementById('tabset-body');
+  if (body0) collectHeaderInto(_tabsetState.form, body0);
   _tabsetState.active = i;
   document.querySelectorAll('.ptab2-bar .ptab2').forEach((e, k) => e.classList.toggle('active', k === i));
   const body = document.getElementById('tabset-body');
@@ -2186,6 +2331,15 @@ function tabsetSwitch(i) {
   if (body) body.innerHTML = g && g.length ? pFieldGrid(g) : `<div class="text-sm text-slate-400 py-6 text-center"><i class="fas fa-sliders"></i> ${t('common.tab_empty') || '该分组暂无更多配置项'}</div>`;
 }
 window.tabsetSwitch = tabsetSwitch;
+// p_tabset 保存:合并内存 form + 当前可见 tab
+function pfSaveTabset(btn) {
+  if (!_tabsetState) { pfSaveCollect(btn); return; }
+  const body = document.getElementById('tabset-body');
+  if (body) collectHeaderInto(_tabsetState.form, body);
+  const mid = (S.curModule && S.curModule.id) || S.currentNav;
+  pfSaveForm(btn, mid, Object.assign({}, _tabsetState.form));
+}
+window.pfSaveTabset = pfSaveTabset;
 
 // ═══════════════════════════════════════════════════════════
 //  AI 配置后台 —— 基础配置 / 模型管理 / 分发应用

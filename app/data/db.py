@@ -162,6 +162,19 @@ CREATE TABLE IF NOT EXISTS module_records (
 );
 CREATE INDEX IF NOT EXISTS idx_modrec ON module_records(module_id, company);
 
+-- ④b 模块整表单(p_detail/p_formula/p_tabset 的单条表单配置 · 按 module+company 唯一)
+--    与 module_records(多行表格) 区分: 这里一个 module+company 只存一份表单 JSON。
+CREATE TABLE IF NOT EXISTS module_forms (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    module_id  TEXT NOT NULL,
+    company    TEXT NOT NULL,
+    form       TEXT NOT NULL,            -- JSON: {字段label: 值, ..., _formula: '...'}
+    updated_at TEXT NOT NULL,
+    updated_by TEXT DEFAULT '当前用户',
+    UNIQUE(module_id, company)
+);
+CREATE INDEX IF NOT EXISTS idx_modform ON module_forms(module_id, company);
+
 -- ⑤ 余额调整流水(增/减/转移 · 必填原因 · 全留痕)
 CREATE TABLE IF NOT EXISTS balance_adjust (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -539,6 +552,34 @@ def delete_module_record(rid: int, company: str = "sg") -> bool:
     _exec("DELETE FROM module_records WHERE id=? AND company=?", (rid, company))
     log(company, "当前用户", "删除记录", rec["module_id"], f"#{rid}")
     return True
+
+
+# ── 模块整表单 upsert/get(p_detail / p_formula / p_tabset) ──────────────────
+def upsert_module_form(module_id: str, company: str, form: dict,
+                       updated_by: str = "当前用户") -> dict:
+    """按 module+company 存一份表单 JSON; 已存在则覆盖。"""
+    payload = __import__("json").dumps(form, ensure_ascii=False)
+    _exec(
+        "INSERT INTO module_forms(module_id,company,form,updated_at,updated_by)"
+        " VALUES(?,?,?,?,?)"
+        " ON CONFLICT(module_id,company) DO UPDATE SET"
+        " form=excluded.form, updated_at=excluded.updated_at, updated_by=excluded.updated_by",
+        (module_id, company, payload, _now(), updated_by))
+    log(company, updated_by, "保存表单", module_id, str(form)[:120])
+    return {"module_id": module_id, "company": company, "form": form,
+            "updated_at": _now()}
+
+
+def get_module_form(module_id: str, company: str = "sg") -> dict:
+    """取某模块某公司的已存表单; 没有则返回空 dict(前端用默认值)。"""
+    row = _one("SELECT form FROM module_forms WHERE module_id=? AND company=?",
+               (module_id, company))
+    if not row:
+        return {}
+    try:
+        return __import__("json").loads(row["form"])
+    except Exception:
+        return {}
 
 
 def list_claims(company: str = "sg", status: str | None = None,
