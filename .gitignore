@@ -19,3 +19,5 @@ claimgpt.db-wal
 claimgpt.db-shm
 exports/
 verify_obf.py
+verify_flow.py
+verify_lang.py

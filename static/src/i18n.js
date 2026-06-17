@@ -350,8 +350,8 @@ const I18N = {
   ms: {}, th: {}, vi: {}, id: {},
 };
 
-// 当前语言(默认中文,localStorage 记忆)
-let _lang = localStorage.getItem('claimgpt_lang') || 'zh';
+// 当前语言(首次登录默认英文,之后 localStorage 记忆用户选择)
+let _lang = localStorage.getItem('claimgpt_lang') || 'en';
 const _langChangeCbs = [];
 
 // 取词:支持点号路径 'nav.dashboard',未命中回退 en → zh → key 本身
@@ -389,5 +389,8 @@ window.t = t;
 window.setLang = setLang;
 window.getLang = getLang;
 window.onLangChange = onLangChange;
+
+// 启动即同步 <html lang>,确保首屏语言标记与当前语言一致(默认英文)
+document.documentElement.lang = _lang === 'zh' ? 'zh-CN' : _lang;
 window.applyI18n = applyI18n;
 window.I18N = I18N;
