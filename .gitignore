@@ -22,3 +22,4 @@ verify_obf.py
 verify_flow.py
 verify_lang.py
 verify_rm.py
+verify_mask.py

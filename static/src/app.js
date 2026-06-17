@@ -4,6 +4,10 @@ const $$ = s => document.querySelectorAll(s);
 const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
 
+// 对外信息脱敏开关:false=对外展示(隐藏「技术栈」板块 + 「商业化路线图」入口/页面),
+// true=内部完整视图。内部需查看时改为 true 并重新混淆即可恢复。
+const SHOW_INTERNAL = false;
+
 // 统一 API 辅助:GET 直接传 url;POST/PUT/DELETE 传 body 对象(自动带 JSON 头并解析)
 async function api(url, body, method) {
   const opt = { method: method || (body ? 'POST' : 'GET') };
@@ -253,7 +257,7 @@ function go(navId) {
   const view = $('#view');
   view.classList.remove('fade-in'); void view.offsetWidth; view.classList.add('fade-in');
   if (navId === '__arch') return renderArchitecture();  // 系统架构图谱+说明书(点 Logo 进入)
-  if (navId === '__roadmap') return renderRoadmap();    // 商业化路线图(从架构页进入)
+  if (navId === '__roadmap') return SHOW_INTERNAL ? renderRoadmap() : renderArchitecture();  // 商业化路线图(仅内部,脱敏模式回退架构页)
   if (navId === '__me') return renderMeView();          // 移动端·我的(个人中心)
   if (navId === '__payslip') return renderMyPayslip();  // 移动端·我的薪资单
   // 员工(手机模式)用专属轻量首页,而非管理者的桌面大屏
@@ -2551,10 +2555,11 @@ function renderArchitecture() {
       <div class="arch-rolesx">${roleCards}</div>
     </section>
 
+    ${SHOW_INTERNAL ? `
     <section class="arch-sec" id="arch-tech">
       ${biH2('fa-screwdriver-wrench', '技术栈', 'Tech Stack')}
       <div class="arch-stacks">${stackHtml}</div>
-    </section>
+    </section>` : ''}
 
     <section class="arch-sec">
       ${biH2('fa-shield-halved', '合规与精度内核', 'Compliance & Precision Core')}
@@ -2566,6 +2571,7 @@ function renderArchitecture() {
       <div class="arch-waves">${waveHtml}</div>
     </section>
 
+    ${SHOW_INTERNAL ? `
     <section class="arch-sec">
       <div class="rm-entry" id="goto-roadmap">
         <div class="rm-entry-ic"><i class="fas fa-rocket"></i></div>
@@ -2575,11 +2581,11 @@ function renderArchitecture() {
         </div>
         <i class="fas fa-arrow-right rm-entry-arrow"></i>
       </div>
-    </section>
+    </section>` : ''}
 
     <footer class="arch-foot">
-      Paydaes ClaimGPT · 集团版 V3.0 · 由 LangGraph 编排引擎驱动<br>
-      <i>Paydaes ClaimGPT · Enterprise V3.0 · Powered by LangGraph</i>
+      Paydaes ClaimGPT · 集团版 V3.0<br>
+      <i>Paydaes ClaimGPT · Enterprise V3.0</i>
     </footer>
   </div>`;
   const rmBtn = $('#goto-roadmap');
