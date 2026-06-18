@@ -116,6 +116,16 @@ const I18N = {
       radius: '半径', meter: '米打卡有效', search: '搜索地址/地点定位…',
       go: '定位', notfound: '未找到该地址',
     },
+    visit: {
+      title: '访客记录', uniq_ip: '独立 IP', total_hits: '次访问',
+      loading: '加载访客记录…', empty: '暂无访客记录',
+      visited: '访问', times: '次', pages: '个页面',
+      just_now: '刚刚', min_ago: ' 分钟前', hr_ago: ' 小时前', day_ago: ' 天前',
+      mobile: '手机', tablet: '平板', desktop: '桌面',
+      k_page: '浏览', k_action: '操作', k_api: '接口',
+      act_switch_co: '切换公司', act_switch_role: '切换角色',
+      act_save: '保存配置', act_ai: 'AI 提问',
+    },
     table: {
       no: '单号', applicant: '申请人', type: '类型', amount: '金额',
       risk: '风险', note: '备注', status: '状态', date: '日期',
@@ -291,6 +301,16 @@ const I18N = {
       coord: 'Coordinate (auto-updates on drag)', hint: 'Drag the pin or click the map to locate',
       radius: 'Radius', meter: 'm clock-in valid', search: 'Search address / place…',
       go: 'Locate', notfound: 'Address not found',
+    },
+    visit: {
+      title: 'Visitor Log', uniq_ip: 'unique IPs', total_hits: 'visits',
+      loading: 'Loading visitor log…', empty: 'No visitor records yet',
+      visited: 'visited', times: 'times', pages: 'pages',
+      just_now: 'just now', min_ago: ' min ago', hr_ago: ' hr ago', day_ago: ' days ago',
+      mobile: 'Mobile', tablet: 'Tablet', desktop: 'Desktop',
+      k_page: 'View', k_action: 'Action', k_api: 'API',
+      act_switch_co: 'Switch company', act_switch_role: 'Switch role',
+      act_save: 'Save config', act_ai: 'AI query',
     },
     table: {
       no: 'No.', applicant: 'Applicant', type: 'Type', amount: 'Amount',

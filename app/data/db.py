@@ -190,6 +190,23 @@ CREATE TABLE IF NOT EXISTS balance_adjust (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_baladj ON balance_adjust(company);
+
+-- ⑥ 访客行为日志(谁/哪个IP/访问了哪个页面/做了什么操作 · 全留痕)
+--    一条 = 一次页面访问或一次操作; ip 用于在前端「铃铛」里按独立访客分组聚合。
+CREATE TABLE IF NOT EXISTS visit_logs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip         TEXT NOT NULL,           -- 访客 IP
+    kind       TEXT NOT NULL DEFAULT 'page',  -- page(浏览页面) / action(操作) / api(后端接口)
+    page       TEXT,                    -- 页面/模块 标识 (nav id 或路径)
+    title      TEXT,                    -- 人类可读标题(页面名/操作描述)
+    detail     TEXT,                    -- 操作细节(看了什么/改了什么)
+    company    TEXT,                    -- 当时所在公司
+    role       TEXT,                    -- 当时所在角色
+    ua         TEXT,                    -- User-Agent(粗解析设备)
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_visit_ip ON visit_logs(ip);
+CREATE INDEX IF NOT EXISTS idx_visit_time ON visit_logs(created_at);
 """
 
 
@@ -937,3 +954,69 @@ def resolve_binding(agent_id: str) -> dict | None:
         "base_url": p["base_url"], "api_key": p.get("api_key", ""),
         "model_id": b.get("model_id"),
     }
+
+
+# ═══════════════════════════════════════════════
+# 访客行为日志(谁/哪个IP/看了哪个页面/做了什么)
+# ═══════════════════════════════════════════════
+def log_visit(ip: str, kind: str = "page", page: str = "", title: str = "",
+              detail: str = "", company: str = "", role: str = "", ua: str = "") -> int:
+    """落一条访客行为。kind: page(浏览)/action(操作)/api(后端接口)。"""
+    return _exec(
+        "INSERT INTO visit_logs(ip,kind,page,title,detail,company,role,ua,created_at) "
+        "VALUES(?,?,?,?,?,?,?,?,?)",
+        (ip or "unknown", kind, page, title, detail, company, role, ua[:240], _now()),
+    )
+
+
+def list_visits(limit: int = 500) -> list[dict]:
+    """最近 N 条访客行为(时间倒序)。"""
+    return _rows(
+        "SELECT * FROM visit_logs ORDER BY id DESC LIMIT ?", (int(limit),)
+    )
+
+
+def visit_sessions(limit_ips: int = 50, events_per_ip: int = 40) -> list[dict]:
+    """按独立 IP 聚合的访客会话列表 —— 铃铛通知中心直接消费。
+
+    返回结构(每个独立 IP 一条):
+      {ip, first_seen, last_seen, visits(总条数), pages(去重页面数),
+       companies[], roles[], ua, events:[{kind,page,title,detail,company,role,time}, ...]}
+    """
+    # 1) 先取每个 IP 的聚合概览(按最近活跃倒序)
+    overview = _rows(
+        "SELECT ip, COUNT(*) AS visits, MIN(created_at) AS first_seen, "
+        "       MAX(created_at) AS last_seen, COUNT(DISTINCT page) AS pages, "
+        "       MAX(ua) AS ua "
+        "FROM visit_logs GROUP BY ip ORDER BY last_seen DESC LIMIT ?",
+        (int(limit_ips),),
+    )
+    out = []
+    for o in overview:
+        ip = o["ip"]
+        # 2) 该 IP 的明细事件(时间倒序,取最近 N 条)
+        events = _rows(
+            "SELECT kind,page,title,detail,company,role,created_at AS time "
+            "FROM visit_logs WHERE ip=? ORDER BY id DESC LIMIT ?",
+            (ip, int(events_per_ip)),
+        )
+        companies = sorted({e["company"] for e in events if e.get("company")})
+        roles = sorted({e["role"] for e in events if e.get("role")})
+        out.append({
+            "ip": ip,
+            "first_seen": o["first_seen"],
+            "last_seen": o["last_seen"],
+            "visits": o["visits"],
+            "pages": o["pages"],
+            "companies": companies,
+            "roles": roles,
+            "ua": o.get("ua") or "",
+            "events": events,
+        })
+    return out
+
+
+def visit_stats() -> dict:
+    """概览统计:独立 IP 数 + 总访问条数(用于铃铛红点计数)。"""
+    r = _one("SELECT COUNT(DISTINCT ip) AS ips, COUNT(*) AS total FROM visit_logs")
+    return {"ips": (r or {}).get("ips", 0) or 0, "total": (r or {}).get("total", 0) or 0}

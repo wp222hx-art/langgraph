@@ -12,7 +12,7 @@ import asyncio
 import json
 from datetime import datetime
 
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -25,6 +25,24 @@ app = FastAPI(title="Paydaes ClaimGPT", version="3.0")
 
 # 启动即初始化真实持久化层(建表 + 首次播种)
 db.init_db()
+
+
+# ═══════════════════════════════════════════════
+# 访客行为埋点 —— 取真实客户端 IP(兼容反向代理)
+# ═══════════════════════════════════════════════
+def _client_ip(request: Request) -> str:
+    """优先取代理头(Cloudflare / Nginx),回退直连 IP。"""
+    h = request.headers
+    cf = h.get("cf-connecting-ip")
+    if cf:
+        return cf.strip()
+    xff = h.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    xri = h.get("x-real-ip")
+    if xri:
+        return xri.strip()
+    return request.client.host if request.client else "unknown"
 
 # ── 5 主 Agent 元信息 ──
 AGENTS = [
@@ -1030,12 +1048,57 @@ def _sse(event: str, data: dict) -> str:
 
 
 @app.get("/")
-def index():
+def index(request: Request):
+    # 访客埋点:每次打开平台首页落一条 page 记录(IP / UA / 时间)
+    try:
+        db.log_visit(
+            ip=_client_ip(request), kind="page", page="__entry",
+            title="进入平台", detail="打开 ClaimGPT 首页",
+            ua=request.headers.get("user-agent", ""),
+        )
+    except Exception:
+        pass
     # index.html 永不缓存:确保浏览器每次都拿到最新引用(内含静态资源版本号),彻底避免旧缓存
     return FileResponse("static/index.html", headers={
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache", "Expires": "0",
     })
+
+
+# ═══════════════════════════════════════════════
+# 访客记录:前端埋点上报 + 铃铛通知中心查询
+# ═══════════════════════════════════════════════
+class TrackReq(BaseModel):
+    kind: str = "page"          # page(浏览页面) / action(操作)
+    page: str = ""              # 页面/模块标识(nav id)
+    title: str = ""            # 人类可读标题
+    detail: str = ""           # 操作细节
+    company: str = ""           # 当时公司
+    role: str = ""             # 当时角色
+
+
+@app.post("/api/track")
+async def track_visit(req: TrackReq, request: Request):
+    """前端埋点上报:记录用户访问了哪个页面 / 进行了哪些操作。"""
+    try:
+        db.log_visit(
+            ip=_client_ip(request), kind=req.kind or "page",
+            page=req.page, title=req.title, detail=req.detail,
+            company=req.company, role=req.role,
+            ua=request.headers.get("user-agent", ""),
+        )
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.get("/api/visits")
+def get_visits(limit_ips: int = 50, events: int = 40):
+    """铃铛通知中心:按独立 IP 分组的访客会话 + 概览统计。"""
+    return {
+        "stats": db.visit_stats(),
+        "sessions": db.visit_sessions(limit_ips=limit_ips, events_per_ip=events),
+    }
 
 
 class _NoCacheStatic(StaticFiles):

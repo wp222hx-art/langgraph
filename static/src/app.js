@@ -56,6 +56,8 @@ async function boot() {
   go('dashboard');
   bindGlobal();
   initCorePanel();                // AI 中枢状态面板(科幻活体仪表盘)
+  refreshBellBadge();             // 访客记录红点(独立 IP 数)
+  setInterval(refreshBellBadge, 60000);  // 每分钟刷新一次铃铛计数
 }
 
 // ════════ AI 中枢状态面板 —— 13 Agent 灯阵 + 18 模块点阵 + 运维心跳 ════════
@@ -267,6 +269,51 @@ function go(navId) {
   if (navId === 'cockpit') return renderCockpit();
   if (navId === 'ai_config') return renderAIConfig();
   renderModule(navId);
+}
+
+// ── 访客行为埋点:页面浏览自动上报(谁/哪个IP由后端按真实连接识别) ──
+function trackVisit(kind, page, title, detail) {
+  try {
+    fetch('/api/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: kind || 'page', page: page || '', title: title || '',
+        detail: detail || '',
+        company: (S.company && S.company.id) || '',
+        role: (S.role && nameOf(S.role)) || '',
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch (e) {}
+}
+window.trackVisit = trackVisit;
+
+// 路由切换时自动记录"访问了哪个页面"(go 的包装)
+const _rawGo = go;
+go = function (navId) {
+  const r = _rawGo(navId);
+  try { trackVisit('page', navId, navTitle(navId)); } catch (e) {}
+  return r;
+};
+
+// 把 navId 翻译成人类可读的页面名(用于访客记录展示)
+function navTitle(navId) {
+  // 1) 优先在导航树里找(dashboard/global/cockpit 等顶级项含真实双语名)
+  for (const n of (S.nav || [])) {
+    if (n.id === navId) return nameOf(n);
+    for (const c of (n.children || [])) if (c.id === navId) return nameOf(c);
+  }
+  // 2) 特殊页(以 __ 开头的虚拟页 / 配置页)用映射
+  const map = {
+    __arch: t('arch.enter') || '系统架构', __roadmap: '商业化路线图',
+    __entry: t('visit.entry') || '进入平台',
+    __me: nameOf(S.role && S.role.id === 'employee' ? { name: '我的', name_en: 'My Space' } : { name: '我的', name_en: 'My Space' }),
+    __payslip: '我的薪资单',
+    ai_config: t('nav.ai_config') || 'AI 配置',
+  };
+  if (map[navId]) return map[navId];
+  return navId;
 }
 
 window.toggleGroup = toggleGroup;
@@ -1462,6 +1509,7 @@ function bindGlobal() {
   $('#company-switch').onclick = e => showCompanyPop(e);
   $('#role-switch').onclick = e => showRolePop(e);
   $('#lang-switch').onclick = e => showLangPop(e);
+  if ($('#bell-btn')) $('#bell-btn').onclick = e => showVisitsPop(e);
   $('#global-btn').onclick = () => go('global');
   $('#ai-toggle').onclick = () => toggleAI(true);
   $('#ai-close').onclick = () => toggleAI(false);
@@ -1489,6 +1537,7 @@ function switchCompany(gid, cid) {
   S.group = S.groups.find(g => g.id === gid);
   S.company = S.group.companies.find(c => c.id === cid);
   renderTopbar(); closePopover(); go(S.currentNav);
+  trackVisit('action', 'switch_company', (t('visit.act_switch_co') || '切换公司') + ' → ' + nameOf(S.company));
 }
 window.switchCompany = switchCompany;
 
@@ -1504,6 +1553,7 @@ function switchRole(id) {
   applyMode();                       // 用户模式 → 移动端外壳;管理角色 → 桌面工作台
   renderTopbar(); renderNav(); closePopover();
   if (!S.role.menus.includes(S.currentNav)) go('dashboard'); else go(S.currentNav);
+  trackVisit('action', 'switch_role', (t('visit.act_switch_role') || '切换角色') + ' → ' + nameOf(S.role));
 }
 window.switchRole = switchRole;
 
@@ -1789,6 +1839,126 @@ function popover(html, opts = {}) {
 function closePopover() { $('#popover').classList.add('hidden'); $('#popover-mask').classList.add('hidden'); }
 window.closePopover = closePopover;
 
+// ════════ 访客记录中心(铃铛) ════════
+// 相对时间("3分钟前" / "2小时前"),UTC 时间戳转本地友好显示
+function _ago(ts) {
+  if (!ts) return '';
+  const d = new Date((ts + 'Z').replace(' ', 'T'));  // 后端存 UTC
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (isNaN(diff)) return ts;
+  if (diff < 60) return t('visit.just_now') || '刚刚';
+  if (diff < 3600) return Math.floor(diff / 60) + (t('visit.min_ago') || ' 分钟前');
+  if (diff < 86400) return Math.floor(diff / 3600) + (t('visit.hr_ago') || ' 小时前');
+  return Math.floor(diff / 86400) + (t('visit.day_ago') || ' 天前');
+}
+// 粗解析设备类型(从 UA)
+function _device(ua) {
+  ua = ua || '';
+  if (/iPhone|Android.*Mobile|Mobile/i.test(ua)) return '📱 ' + (t('visit.mobile') || '手机');
+  if (/iPad|Tablet/i.test(ua)) return '📱 ' + (t('visit.tablet') || '平板');
+  if (/Macintosh|Mac OS/i.test(ua)) return '💻 Mac';
+  if (/Windows/i.test(ua)) return '💻 Windows';
+  if (/Linux/i.test(ua)) return '💻 Linux';
+  return '💻 ' + (t('visit.desktop') || '桌面');
+}
+const _KIND_META = {
+  page:   { ico: 'fa-eye',           color: '#0ea5e9', label: () => t('visit.k_page') || '浏览' },
+  action: { ico: 'fa-hand-pointer',  color: '#f59e0b', label: () => t('visit.k_action') || '操作' },
+  api:    { ico: 'fa-plug',          color: '#8b5cf6', label: () => t('visit.k_api') || '接口' },
+};
+
+// 刷新铃铛红点(显示独立 IP 数)
+async function refreshBellBadge() {
+  try {
+    const d = await fetch('/api/visits?limit_ips=1&events=1').then(r => r.json());
+    const n = (d.stats && d.stats.ips) || 0;
+    const badge = $('#bell-badge');
+    if (!badge) return;
+    if (n > 0) { badge.textContent = n > 99 ? '99+' : n; badge.classList.remove('hidden'); }
+    else { badge.classList.add('hidden'); }
+  } catch (e) {}
+}
+window.refreshBellBadge = refreshBellBadge;
+
+// 点击铃铛 → 弹出访客记录中心
+async function showVisitsPop(e) {
+  const anchor = e ? e.currentTarget : $('#bell-btn');
+  popover(`<div class="visit-pop"><div class="visit-loading"><i class="fas fa-spinner fa-spin"></i> ${t('visit.loading') || '加载访客记录…'}</div></div>`, { anchor, wide: true });
+  $('#popover').style.width = 'min(440px,94vw)';
+  let d;
+  try { d = await fetch('/api/visits?limit_ips=50&events=40').then(r => r.json()); }
+  catch (err) { d = { stats: { ips: 0, total: 0 }, sessions: [] }; }
+  renderVisitsPop(d, anchor);
+}
+window.showVisitsPop = showVisitsPop;
+
+function renderVisitsPop(d, anchor) {
+  const stats = d.stats || { ips: 0, total: 0 };
+  const sessions = d.sessions || [];
+  const header = `<div class="visit-head">
+    <div class="visit-title"><i class="fas fa-bell"></i> ${t('visit.title') || '访客记录'}</div>
+    <div class="visit-stat">
+      <span><b>${stats.ips || 0}</b> ${t('visit.uniq_ip') || '独立 IP'}</span>
+      <span class="visit-dot">·</span>
+      <span><b>${stats.total || 0}</b> ${t('visit.total_hits') || '次访问'}</span>
+    </div>
+  </div>`;
+
+  let body;
+  if (!sessions.length) {
+    body = `<div class="visit-empty"><i class="fas fa-inbox"></i><p>${t('visit.empty') || '暂无访客记录'}</p></div>`;
+  } else {
+    body = `<div class="visit-list">` + sessions.map((s, i) => {
+      const flags = (s.companies || []).map(c => _coFlag(c)).filter(Boolean).join(' ');
+      const evHtml = (s.events || []).map(ev => {
+        const meta = _KIND_META[ev.kind] || _KIND_META.page;
+        const sub = [ev.detail, ev.company ? _coName(ev.company) : '', ev.role].filter(Boolean).join(' · ');
+        return `<div class="visit-ev">
+          <span class="visit-ev-ico" style="color:${meta.color}"><i class="fas ${meta.ico}"></i></span>
+          <span class="visit-ev-body">
+            <span class="visit-ev-title">${esc(ev.title || ev.page || '-')}</span>
+            ${sub ? `<span class="visit-ev-sub">${esc(sub)}</span>` : ''}
+          </span>
+          <span class="visit-ev-time">${_ago(ev.time)}</span>
+        </div>`;
+      }).join('');
+      return `<div class="visit-card">
+        <div class="visit-card-hd" onclick="this.parentElement.classList.toggle('open')">
+          <span class="visit-ip-ico"><i class="fas fa-location-dot"></i></span>
+          <span class="visit-ip-main">
+            <span class="visit-ip">${esc(s.ip)} ${flags}</span>
+            <span class="visit-ip-meta">${_device(s.ua)} · ${t('visit.visited') || '访问'} ${s.visits} ${t('visit.times') || '次'} · ${s.pages} ${t('visit.pages') || '个页面'}</span>
+          </span>
+          <span class="visit-ip-time">${_ago(s.last_seen)}<i class="fas fa-chevron-down visit-caret"></i></span>
+        </div>
+        <div class="visit-evs">${evHtml}</div>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+  $('#popover').innerHTML = `<div class="visit-pop">${header}${body}</div>`;
+  $('#popover').style.width = 'min(440px,94vw)';
+  // 重新定位(内容变高后)
+  if (anchor) {
+    const r = anchor.getBoundingClientRect();
+    const p = $('#popover');
+    p.style.transform = 'none';
+    p.style.left = Math.max(8, Math.min(r.right - 440, window.innerWidth - 448)) + 'px';
+    p.style.top = (r.bottom + 6) + 'px';
+  }
+  // 默认展开第一条
+  const first = $('#popover').querySelector('.visit-card');
+  if (first) first.classList.add('open');
+}
+// 公司 id → 旗帜 / 名称(从 S.groups 取)
+function _coFlag(cid) {
+  for (const g of (S.groups || [])) for (const c of (g.companies || [])) if (c.id === cid) return c.flag || '';
+  return '';
+}
+function _coName(cid) {
+  for (const g of (S.groups || [])) for (const c of (g.companies || [])) if (c.id === cid) return nameOf(c);
+  return cid;
+}
+
 // ════════ 移动端侧栏 ════════
 function openMobileSidebar() { $('#sidebar').classList.remove('-translate-x-full'); $('#sidebar-mask').classList.remove('hidden'); }
 function closeMobileSidebar() { if (window.innerWidth < 768) { $('#sidebar').classList.add('-translate-x-full'); $('#sidebar-mask').classList.add('hidden'); } }
@@ -1835,6 +2005,7 @@ function sendAI() {
   if (!text || aiBusy) return;
   inp.value = ''; inp.style.height = 'auto'; addUserMsg(text);
   aiBusy = true; $('#ai-send').disabled = true;
+  trackVisit('action', 'ai_chat', (t('visit.act_ai') || 'AI 提问'), text.slice(0, 40));
 
   const tid = 'tk' + Date.now();
   $('#ai-messages').insertAdjacentHTML('beforeend',
@@ -2034,6 +2205,7 @@ window.pfSaveForm = pfSaveForm;
 function pfSaveCollect(btn) {
   const mid = (S.curModule && S.curModule.id) || S.currentNav;
   pfSaveForm(btn, mid, collectForm());
+  trackVisit('action', mid, (t('visit.act_save') || '保存配置') + ' · ' + navTitle(mid));
 }
 window.pfSaveCollect = pfSaveCollect;
 
