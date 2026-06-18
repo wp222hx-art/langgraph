@@ -111,6 +111,11 @@ const I18N = {
       pick_first: '请先选中一项', tab_empty: '该分组暂无更多配置项',
       page: '第', page_unit: '页',
     },
+    map: {
+      coord: '坐标 (拖图钉自动更新)', hint: '拖动图钉或点击地图定位',
+      radius: '半径', meter: '米打卡有效', search: '搜索地址/地点定位…',
+      go: '定位', notfound: '未找到该地址',
+    },
     table: {
       no: '单号', applicant: '申请人', type: '类型', amount: '金额',
       risk: '风险', note: '备注', status: '状态', date: '日期',
@@ -281,6 +286,11 @@ const I18N = {
       no_data: 'No matching data', open: 'Open', empty: '(empty)', remove: 'Remove',
       pick_first: 'Please select an item first', tab_empty: 'No more settings in this group',
       page: 'Page', page_unit: '',
+    },
+    map: {
+      coord: 'Coordinate (auto-updates on drag)', hint: 'Drag the pin or click the map to locate',
+      radius: 'Radius', meter: 'm clock-in valid', search: 'Search address / place…',
+      go: 'Locate', notfound: 'Address not found',
     },
     table: {
       no: 'No.', applicant: 'Applicant', type: 'Type', amount: 'Amount',

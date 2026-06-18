@@ -2463,47 +2463,118 @@ async function fxSave(btn) {
 }
 window.fxSave = fxSave;
 
-// ⑥ 地图定位框(图钉可拖动 + 坐标实时回填)
+// ⑥ 地图定位框 —— 真实地图(Leaflet + OpenStreetMap, 图钉可拖 + 半径圆 + 地址搜索)
+let _leafMap = null;     // Leaflet 地图实例(单例,切模块时销毁重建)
 function pMapView(m) {
   const radius = m.radius || '500';
-  setTimeout(() => initMapDrag(), 0);
+  const geo = m.geo || { lat: 3.157640, lng: 101.711950, zoom: 14 };
+  const coord = m.coord || `${geo.lat}, ${geo.lng}`;
+  // 把初始化参数挂到 window,供 initRealMap 读取(避免闭包/混淆问题)
+  window._mapInit = { lat: geo.lat, lng: geo.lng, zoom: geo.zoom || 14,
+                      radius: Number(radius) || 500, country: m.country_code || '' };
+  setTimeout(() => initRealMap(), 60);   // 等容器进 DOM 再初始化地图
   return `<div class="panel p-5 md:p-6">
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div>${pFieldGrid(m.fields || [])}
         <div class="pf-cell mt-1"><label class="pf-label">${t('map.coord') || '坐标 (拖图钉自动更新)'}</label>
-          <input class="pf-input pf-ro" id="map-coord" data-label="GPS Coordinate" value="${esc(m.coord || '3.139003, 101.686855')}" readonly></div>
+          <input class="pf-input pf-ro" id="map-coord" data-label="GPS Coordinate" value="${esc(coord)}" readonly></div>
       </div>
       <div>
         <label class="pf-label">Map <span class="text-rose-500">*</span></label>
-        <div class="map-box" id="map-box">
-          <div class="map-grid"></div>
-          <i class="fas fa-location-dot map-pin" id="map-pin"></i>
-          <div class="map-radius"></div>
-          <div class="map-hint"><i class="fas fa-circle-info"></i> ${t('map.hint') || '拖动图钉定位'} · ${t('map.radius') || '半径'} ${radius} ${t('map.meter') || '米打卡有效'}</div>
+        <div class="map-search-bar">
+          <i class="fas fa-magnifying-glass map-search-ico"></i>
+          <input id="map-search" class="map-search-input" placeholder="${t('map.search') || '搜索地址/地点定位…'}"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();mapSearch();}">
+          <button type="button" class="map-search-btn" onclick="mapSearch()">${t('map.go') || '定位'}</button>
         </div>
+        <div class="map-box" id="map-box"></div>
+        <div class="map-foot"><i class="fas fa-circle-info"></i>
+          ${t('map.hint') || '拖动图钉或点击地图定位'} ·
+          ${t('map.radius') || '半径'} <b id="map-radius-txt">${radius}</b> ${t('map.meter') || '米打卡有效'}</div>
       </div>
     </div>
     ${pFooter(t('common.save'), 'pfSaveCollect(this)')}
   </div>`;
 }
-function initMapDrag() {
-  const box = document.getElementById('map-box'), pin = document.getElementById('map-pin');
-  if (!box || !pin) return;
-  let dragging = false;
-  const move = (clientX, clientY) => {
-    const r = box.getBoundingClientRect();
-    let x = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
-    let y = Math.max(0, Math.min(1, (clientY - r.top) / r.height));
-    pin.style.left = (x * 100) + '%'; pin.style.top = (y * 100) + '%';
-    const lat = (3.20 - y * 0.12).toFixed(6), lng = (101.62 + x * 0.12).toFixed(6);
-    const c = document.getElementById('map-coord'); if (c) c.value = `${lat}, ${lng}`;
+
+// 初始化真实 Leaflet 地图:可拖动 marker + 打卡半径圆 + 实时回填坐标
+function initRealMap() {
+  const box = document.getElementById('map-box');
+  if (!box || typeof L === 'undefined') return;   // Leaflet 未就绪则跳过
+  const cfg = window._mapInit || { lat: 3.157640, lng: 101.711950, zoom: 14, radius: 500 };
+  // 销毁旧实例(切换公司/模块复用同一容器)
+  if (_leafMap) { try { _leafMap.remove(); } catch (e) {} _leafMap = null; }
+  box.innerHTML = '';
+
+  const map = L.map(box, { zoomControl: true, attributionControl: true })
+               .setView([cfg.lat, cfg.lng], cfg.zoom || 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  // 打卡有效半径圆(单位:米)
+  const circle = L.circle([cfg.lat, cfg.lng], {
+    radius: cfg.radius || 500, color: '#0f766e', weight: 1.5,
+    fillColor: '#14b8a6', fillOpacity: 0.15
+  }).addTo(map);
+
+  // 可拖动图钉
+  const marker = L.marker([cfg.lat, cfg.lng], { draggable: true }).addTo(map);
+
+  const sync = (latlng) => {
+    circle.setLatLng(latlng);
+    const c = document.getElementById('map-coord');
+    if (c) c.value = `${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}`;
   };
-  pin.style.cursor = 'grab';
-  pin.addEventListener('mousedown', e => { dragging = true; pin.style.cursor = 'grabbing'; e.preventDefault(); });
-  window.addEventListener('mousemove', e => { if (dragging) move(e.clientX, e.clientY); });
-  window.addEventListener('mouseup', () => { dragging = false; pin.style.cursor = 'grab'; });
-  box.addEventListener('click', e => { if (e.target !== pin) move(e.clientX, e.clientY); });
+  marker.on('drag', e => sync(e.target.getLatLng()));
+  marker.on('dragend', e => { sync(e.target.getLatLng()); });
+  // 点击地图 → 图钉跳过去
+  map.on('click', e => { marker.setLatLng(e.latlng); sync(e.latlng); });
+  // 半径输入框联动圆大小
+  const radInput = document.querySelector('[data-label="Maximum Radius"]');
+  if (radInput) radInput.addEventListener('input', () => {
+    const r = Number(radInput.value) || 0;
+    circle.setRadius(r);
+    const txt = document.getElementById('map-radius-txt'); if (txt) txt.textContent = r;
+  });
+
+  _leafMap = map; _leafMapMarker = marker; _leafMapCircle = circle;
+  // 容器可能在隐藏/动画后才定尺寸,强制重算一次
+  setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 200);
 }
+let _leafMapMarker = null, _leafMapCircle = null;
+
+// 地址搜索(OSM Nominatim 免费地理编码,无需 Key)
+async function mapSearch() {
+  const inp = document.getElementById('map-search');
+  if (!inp || !inp.value.trim() || !_leafMap) return;
+  const q = inp.value.trim();
+  const btn = document.querySelector('.map-search-btn');
+  const old = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const country = (window._mapInit && window._mapInit.country) || '';
+    let url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+    if (country) url += `&countrycodes=${country.toLowerCase()}`;
+    const res = await fetch(url, { headers: { 'Accept-Language': S.lang === 'en' ? 'en' : 'zh' } });
+    const arr = await res.json();
+    if (arr && arr.length) {
+      const lat = parseFloat(arr[0].lat), lng = parseFloat(arr[0].lon);
+      const ll = L.latLng(lat, lng);
+      _leafMap.setView(ll, 16);
+      if (_leafMapMarker) _leafMapMarker.setLatLng(ll);
+      if (_leafMapCircle) _leafMapCircle.setLatLng(ll);
+      const c = document.getElementById('map-coord');
+      if (c) c.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    } else {
+      acFlash && acFlash(document.querySelector('.map-foot'), t('map.notfound') || '未找到该地址', true);
+    }
+  } catch (e) {
+    console.warn('map search failed', e);
+  } finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
+}
+window.mapSearch = mapSearch;
+window.initRealMap = initRealMap;
 
 // ⑦ Tabset 详情页(内部横向子 Tab 可点切换 + 字段分段)
 let _tabsetState = null;

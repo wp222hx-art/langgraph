@@ -36,6 +36,37 @@ def _country_name(country: str) -> str:
     return _COUNTRY_NAME.get((country or "MY").upper(), "Malaysia")
 
 
+# 国家代码 → 打卡地图默认中心(总部所在主要城市真实经纬度) + 默认州/城市/邮编/地址
+# 供「打卡地点」真实地图(Leaflet/OSM)按公司所在国自动定位中心,与多国数据世界一脉相承。
+_ATTEND_GEO = {
+    "MY": {"lat": 3.157640, "lng": 101.711950, "zoom": 14, "state": "Kuala Lumpur",
+           "city": "Kuala Lumpur", "postcode": "50250",
+           "addr": "Level 12, Menara KL, Jalan Sultan Ismail", "loc": "Paydaes HQ Tower"},
+    "SG": {"lat": 1.283330, "lng": 103.851959, "zoom": 14, "state": "Central",
+           "city": "Singapore", "postcode": "048621",
+           "addr": "1 Raffles Place, #20-01", "loc": "Paydaes Singapore HQ"},
+    "TH": {"lat": 13.746630, "lng": 100.535240, "zoom": 14, "state": "Bangkok",
+           "city": "Bangkok", "postcode": "10330",
+           "addr": "Sukhumvit Road, Klongtoey", "loc": "Paydaes Bangkok Office"},
+    "VN": {"lat": 10.776530, "lng": 106.700980, "zoom": 14, "state": "Ho Chi Minh City",
+           "city": "Ho Chi Minh City", "postcode": "700000",
+           "addr": "Nguyen Hue Boulevard, District 1", "loc": "Paydaes Vietnam Office"},
+    "ID": {"lat": -6.208760, "lng": 106.845600, "zoom": 13, "state": "Jakarta",
+           "city": "Jakarta", "postcode": "10110",
+           "addr": "Jl. M.H. Thamrin, Menteng", "loc": "Paydaes Jakarta Office"},
+    "HK": {"lat": 22.281970, "lng": 114.158100, "zoom": 15, "state": "Central",
+           "city": "Hong Kong", "postcode": "999077",
+           "addr": "Central, Hong Kong Island", "loc": "Paydaes Hong Kong Office"},
+    "CN": {"lat": 31.230416, "lng": 121.473701, "zoom": 13, "state": "Shanghai",
+           "city": "Shanghai", "postcode": "200001",
+           "addr": "陆家嘴环路, 浦东新区", "loc": "Paydaes 上海总部"},
+}
+
+
+def _attend_geo(country: str) -> dict:
+    return _ATTEND_GEO.get((country or "MY").upper(), _ATTEND_GEO["MY"])
+
+
 # Tax 家族顶部横滚 Tab 群(对应真实截图)
 TAX_TABS = ["EPF Rate", "SOCSO Rate", "EIS Rate", "Tax Rate Table",
             "Tax Parameters", "Tax Exemption (TP1)", "Tax Receipt",
@@ -226,6 +257,35 @@ def _leave_modules(cur: str, country: str = "MY") -> dict:
 # ═══════════════════════════════════════════════════════════
 #  ⏰ Time & Attendance 考勤域
 # ═══════════════════════════════════════════════════════════
+def _attend_loc_module(country: str = "MY") -> dict:
+    """打卡地点模块 —— 按公司所在国注入真实地图中心坐标 + 本地默认地址/州/邮编。
+    geo.lat/lng/zoom 供前端 Leaflet 初始化;coord 为图钉初始坐标字符串。"""
+    geo = _attend_geo(country)
+    cy = (country or "MY").upper()
+    # State 下拉选项(默认所在州置顶 + 常见备选)
+    state_opts = [geo["state"]]
+    return {
+        "title": "Attendance Location · 打卡地点", "domain": "考勤管理",
+        "desc": "GPS 打卡地点配置,真实地图拖动图钉设置经纬度与有效打卡半径",
+        "layout": "p_map", "radius": "500",
+        # 真实地图初始化参数(按公司所在国)
+        "geo": {"lat": geo["lat"], "lng": geo["lng"], "zoom": geo["zoom"]},
+        "coord": f"{geo['lat']:.6f}, {geo['lng']:.6f}",
+        "country_code": cy,
+        "actions": ["Save Changes", "+ Add"],
+        "fields": [
+            F("Effective Date", "date", "2026-01-01", True),
+            F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
+            F("Location Name", "t", geo["loc"], True),
+            F("Location Address", "area", geo["addr"], False, hint="请输入地址…"),
+            F("Postcode", "t", geo["postcode"], False),
+            F("Country", "dd", _country_name(country), False, opts=_COUNTRY_OPTS),
+            F("State", "dd", geo["state"], False, opts=state_opts),
+            F("Maximum Radius", "num", "500", False, unit="米"),
+        ],
+    }
+
+
 def _ta_modules(cur: str, code: str = "PDS-MY", country: str = "MY") -> dict:
     return {
         # Shift —— 详情表单(含弹性班次单选 + 宽限期)
@@ -286,23 +346,8 @@ def _ta_modules(cur: str, code: str = "PDS-MY", country: str = "MY") -> dict:
                 ["4", "2026-08-31", "Merdeka Day", "National", "Yes"],
             ],
         },
-        # Attendance Location —— 地图定位
-        "attendance_loc": {
-            "title": "Attendance Location · 打卡地点", "domain": "考勤管理",
-            "desc": "GPS 打卡地点配置,设置经纬度与有效打卡半径",
-            "layout": "p_map", "radius": "500",
-            "actions": ["Save Changes", "+ Add"],
-            "fields": [
-                F("Effective Date", "date", "2026-01-01", True),
-                F("Status", "dd", "A - Active", True, opts=["A - Active", "I - Inactive"]),
-                F("Location Name", "t", "Paydaes HQ Tower", True),
-                F("Location Address", "area", "Level 12, Menara KL, Jalan Sultan Ismail", False, hint="请输入地址…"),
-                F("Postcode", "t", "50250", False),
-                F("Country", "dd", _country_name(country), False, opts=_COUNTRY_OPTS),
-                F("State", "dd", "Kuala Lumpur", False, opts=["Kuala Lumpur", "Selangor"]),
-                F("Maximum Radius", "num", "500", False, unit="米"),
-            ],
-        },
+        # Attendance Location —— 真实地图定位(Leaflet/OSM,按公司所在国自动定位中心)
+        "attendance_loc": _attend_loc_module(country),
         # Overtime Setting —— Tabset(General/Rules/Overtime Type)
         "overtime": {
             "title": "Overtime Setting · 加班设置", "domain": "考勤管理",
