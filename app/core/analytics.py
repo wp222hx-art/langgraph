@@ -107,20 +107,9 @@ def _compute_employee_intl(emp: dict, country: str) -> dict:
     gross = round(basic + ot, 2)
 
     st = SI.compute_statutory(country, gross)
-    er = st["er"]
-    # 把各国雇主缴纳归并到通用桶(供既有 KPI/归因复用):
-    #   养老金/公积金类 → epf_er;医疗/社保类 → socso_er;失业/技能税 → eis_er;其余 → hrdf
-    epf_er = socso_er = eis_er = hrdf = 0.0
-    for k, v in er.items():
-        kl = k.lower()
-        if any(t in k for t in ("养老", "JHT", "JP", "公积金")) or kl in ("cpf", "epf", "mpf"):
-            epf_er += v
-        elif any(t in k for t in ("医疗", "医保", "社保")) or kl in ("socso", "ssf", "si", "hi"):
-            socso_er += v
-        elif any(t in k for t in ("失业",)) or kl in ("eis", "sdl", "ui"):
-            eis_er += v
-        else:
-            hrdf += v  # 工伤/生育/死亡/HRDF 等其他雇主负担
+    # 各国雇主缴纳归并到通用桶(共享 SI.employer_buckets,与发薪批算同一套归并逻辑)
+    bk = SI.employer_buckets(st["er"])
+    epf_er, socso_er, eis_er, hrdf = bk["epf_er"], bk["socso_er"], bk["eis_er"], bk["hrdf"]
 
     return {
         **emp,

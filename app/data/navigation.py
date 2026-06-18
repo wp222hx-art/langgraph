@@ -60,18 +60,73 @@ def dashboard_kpi(company_id: str = "sg"):
         {"label": "适用税率", "label_en": "Tax Rate", "value": base[3], "unit": "%", "unit_en": "%", "trend": "本地", "trend_en": "Local", "icon": "fa-percent", "color": "#ec4899"},
     ]
 
-TODOS = [
-    {"title": "3 笔高风险报销待审批", "title_en": "3 high-risk claims to approve", "type": "审批", "type_en": "Approval", "level": "high", "agent": "ApprovalCopilot"},
-    {"title": "本月薪资接口待跑批", "title_en": "Monthly payroll interface pending", "type": "流程", "type_en": "Flow", "level": "mid", "agent": "PayrollNavigator"},
-    {"title": "2 名晋升员工权益待重算", "title_en": "2 promoted staff entitlements to recompute", "type": "权益", "type_en": "Entitlement", "level": "mid", "agent": "HRStrategist"},
-    {"title": "差旅报销超标 1 笔需复核", "title_en": "1 over-limit travel claim to review", "type": "审核", "type_en": "Audit", "level": "high", "agent": "ApprovalCopilot"},
-]
+# ═══════════════════════════════════════════════
+# 工作台待办 —— 按公司"活数据"派生(待办数量随该公司报销规模/待处理量浮动)
+# ═══════════════════════════════════════════════
+import hashlib as _hashlib
 
-DASHBOARD_CHART = {
-    "labels": ["1月", "2月", "3月", "4月", "5月", "6月"],
-    "labels_en": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-    "series": [
-        {"name": "报销总额(万)", "name_en": "Total Claims (10k)", "data": [45, 52, 38, 61, 72, 58]},
-        {"name": "差旅支出(万)", "name_en": "Travel Spend (10k)", "data": [12, 15, 9, 18, 22, 16]},
-    ],
-}
+
+def _seed(key: str) -> float:
+    """字符串 → 0~1 确定性伪随机(保证 Demo 可复现)。"""
+    return int(_hashlib.md5(key.encode()).hexdigest()[:8], 16) / 0xFFFFFFFF
+
+
+def dashboard_todos(company_id: str = "sg"):
+    """按公司动态待办:数量与该公司「待处理报销笔数 / 适用税率 / 规模」联动,
+    而非全公司一模一样的死常量。"""
+    kpi = dashboard_kpi(company_id)
+    pending = int(kpi[2]["value"])          # 待处理报销笔数(本月)
+    tax_rate = kpi[3]["value"]              # 适用税率
+    claims = int(kpi[0]["value"])           # 本月报销单
+    # 由规模派生各类待办数量(确定性,贴合该公司体量)
+    high_risk = max(1, round(pending * 0.35))
+    promo = max(1, round(claims * 0.02 * (0.6 + _seed(company_id + "promo"))))
+    over_limit = max(0, round(pending * 0.12))
+    cur_label = {"sg": "SGD", "my": "MYR", "th": "THB", "vn": "VND",
+                 "id": "IDR", "hk": "HKD", "cn": "CNY"}.get(company_id, "")
+    todos = [
+        {"title": f"{high_risk} 笔高风险报销待审批",
+         "title_en": f"{high_risk} high-risk claims to approve",
+         "type": "审批", "type_en": "Approval", "level": "high", "agent": "ApprovalCopilot"},
+        {"title": f"本月薪资接口待跑批（{cur_label} · {tax_rate}% 税率）",
+         "title_en": f"Monthly payroll interface pending ({cur_label} · {tax_rate}% tax)",
+         "type": "流程", "type_en": "Flow", "level": "mid", "agent": "PayrollNavigator"},
+        {"title": f"{promo} 名晋升员工权益待重算",
+         "title_en": f"{promo} promoted staff entitlements to recompute",
+         "type": "权益", "type_en": "Entitlement", "level": "mid", "agent": "HRStrategist"},
+    ]
+    if over_limit > 0:
+        todos.append({
+            "title": f"差旅报销超标 {over_limit} 笔需复核",
+            "title_en": f"{over_limit} over-limit travel claim(s) to review",
+            "type": "审核", "type_en": "Audit", "level": "high", "agent": "ApprovalCopilot"})
+    return todos
+
+
+def dashboard_chart(company_id: str = "sg"):
+    """按公司动态趋势图:6 月报销/差旅曲线锚定该公司「本月报销单」量级,
+    叠加确定性月度波动,使各公司图表各不相同(活数据)。"""
+    kpi = dashboard_kpi(company_id)
+    base_claim = max(8.0, kpi[0]["value"] * 0.6)   # 报销总额(万)基准,锚定本月报销量
+    claim_series, travel_series = [], []
+    for i, mon in enumerate(["1月", "2月", "3月", "4月", "5月", "6月"]):
+        # 逐月增长 + 公司确定性波动
+        growth = 0.82 + i * 0.04
+        wobble = 0.85 + _seed(company_id + mon) * 0.30
+        c = round(base_claim * growth * wobble, 1)
+        t = round(c * (0.22 + _seed(company_id + mon + "tv") * 0.12), 1)  # 差旅约占 22~34%
+        claim_series.append(c)
+        travel_series.append(t)
+    return {
+        "labels": ["1月", "2月", "3月", "4月", "5月", "6月"],
+        "labels_en": ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+        "series": [
+            {"name": "报销总额(万)", "name_en": "Total Claims (10k)", "data": claim_series},
+            {"name": "差旅支出(万)", "name_en": "Travel Spend (10k)", "data": travel_series},
+        ],
+    }
+
+
+# 向后兼容:保留默认常量(默认 sg),旧引用不报错
+TODOS = dashboard_todos("sg")
+DASHBOARD_CHART = dashboard_chart("sg")

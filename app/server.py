@@ -203,8 +203,8 @@ def bootstrap():
 def dashboard(company: str = "sg"):
     return {
         "kpi": navigation.dashboard_kpi(company),
-        "todos": navigation.TODOS,
-        "chart": navigation.DASHBOARD_CHART,
+        "todos": navigation.dashboard_todos(company),
+        "chart": navigation.dashboard_chart(company),
     }
 
 
@@ -524,8 +524,11 @@ def payroll_payslip(emp_no: str, company: str = "my", role: str = "payroll"):
     if not permissions.can(role, "payroll.run"):
         return permissions.deny_payload(role, "payroll.run")
     from app.core import payroll_batch
-    from app.data import payroll_data
-    emp = next((e for e in payroll_data.PAYROLL_EMPLOYEES if e["emp_no"] == emp_no), None)
+    from app.data import intl_roster
+    # 与发薪批算/驾驶舱同源:按公司所在国取本地化花名册定位员工
+    country = payroll_batch._country_of(company)
+    roster = intl_roster.localized_roster(country)
+    emp = next((e for e in roster if e["emp_no"] == emp_no), None)
     if not emp:
         return {"ok": False, "error": f"员工 {emp_no} 不存在"}
     leave_f = payroll_batch._get_company_formula("leave_entitlement", company)
@@ -623,36 +626,9 @@ def statutory_export(req: StatutoryExportReq):
         return {"error": str(e)}
 
 
-@app.get("/api/payroll/run")
-def payroll_run(company: str = "my", role: str = "payroll"):
-    """月度薪资跑批预览: 加班分级 / 按比例工资 / 企业总成本+HRDF (FRS 流程2)。"""
-    if not permissions.can(role, "payroll.run"):
-        return permissions.deny_payload(role, "payroll.run")
-    from app.data import payroll_data as P
-    rows, tot = [], {"gross": 0.0, "net": 0.0, "employer": 0.0, "cost": 0.0,
-                     "hrdf": 0.0, "ot": 0.0, "pcb": 0.0, "epf_emp": 0.0, "epf_er": 0.0}
-    for e in P.PAYROLL_EMPLOYEES:
-        m = P.compute_monthly(e)
-        rows.append({
-            "emp_no": m["emp_no"], "name": m["name"], "dept": m.get("dept", ""),
-            "basic": m["basic_pay"], "prorated": m["prorate"]["prorated"],
-            "worked_days": m["prorate"]["worked_days"], "month_days": m["prorate"]["month_days"],
-            "ot_amount": m["ot_amount"], "ot_breakdown": m["ot_detail"]["breakdown"],
-            "hourly": m["ot_detail"]["hourly"],
-            "gross": m["gross_total"], "epf_emp": m["epf_emp"], "epf_er": m["epf_er"],
-            "socso_emp": m["socso_emp"], "socso_er": m["socso_er"],
-            "eis_emp": m["eis_emp"], "eis_er": m["eis_er"],
-            "pcb": m["pcb"], "hrdf": m["hrdf"],
-            "net_pay": m["net_pay"], "employer_contrib": m["employer_contrib"],
-            "total_cost": m["total_cost"],
-        })
-        tot["gross"] += m["gross_total"]; tot["net"] += m["net_pay"]
-        tot["employer"] += m["employer_contrib"]; tot["cost"] += m["total_cost"]
-        tot["hrdf"] += m["hrdf"]; tot["ot"] += m["ot_amount"]; tot["pcb"] += m["pcb"]
-        tot["epf_emp"] += m["epf_emp"]; tot["epf_er"] += m["epf_er"]
-    tot = {k: round(v, 2) for k, v in tot.items()}
-    return {"ok": True, "company": company, "count": len(rows), "rows": rows, "totals": tot,
-            "ot_rates": P.OT_RATES, "hrdf_rate": P.HRDF_RATE}
+# 注:旧版「纯 MY 跑批」/api/payroll/run 已移除(原与上方 511 行公式驱动版重复定义,
+#    FastAPI 会以后定义者覆盖前者,导致前端拿到不带 formulas key 的旧格式)。
+#    现统一由 511 行 payroll_batch.batch_summary 提供「本地化花名册 + 国别法定引擎 + 公式驱动」格式。
 
 
 # ═══════ AI 老板驾驶舱 + AI 异常稽查 (共享 analytics 引擎) ═══════

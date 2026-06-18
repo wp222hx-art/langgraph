@@ -300,3 +300,24 @@ def compute_statutory(country: str, gross: float) -> dict:
     country 不支持时回退 MY。"""
     fn = _DISPATCH.get(country, _my)
     return fn(float(gross or 0))
+
+
+def employer_buckets(er: dict) -> dict:
+    """把各国雇主缴纳明细归并到 4 个通用桶(供驾驶舱 KPI/归因 与 发薪汇总 共用,
+    避免 analytics 与 payroll_batch 各写一份归并逻辑)。
+      养老金/公积金类 → epf_er;医疗/社保类 → socso_er;
+      失业/技能税 → eis_er;其余(工伤/生育/死亡/HRDF…) → hrdf
+    返回 {epf_er, socso_er, eis_er, hrdf}(均已四舍五入)。"""
+    epf_er = socso_er = eis_er = hrdf = 0.0
+    for k, v in (er or {}).items():
+        kl = k.lower()
+        if any(t in k for t in ("养老", "JHT", "JP", "公积金")) or kl in ("cpf", "epf", "mpf"):
+            epf_er += v
+        elif any(t in k for t in ("医疗", "医保", "社保")) or kl in ("socso", "ssf", "si", "hi"):
+            socso_er += v
+        elif any(t in k for t in ("失业",)) or kl in ("eis", "sdl", "ui"):
+            eis_er += v
+        else:
+            hrdf += v
+    return {"epf_er": round(epf_er, 2), "socso_er": round(socso_er, 2),
+            "eis_er": round(eis_er, 2), "hrdf": round(hrdf, 2)}

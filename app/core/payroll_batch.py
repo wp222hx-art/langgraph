@@ -7,14 +7,67 @@
 每条工资单都带「公式溯源」(formula_trace): 用了哪条公式 / 喂了哪些变量 / 算出什么值,
 实现「公式 → 工资单」的可解释闭环。
 
-数据流:
-  module_forms(公司维度落库公式) ──► formula_engine.evaluate(公式, 员工变量) ──►
-  应享天数 / 加班费 ──► payroll_data.compute_monthly(法定扣除) ──► 工资单
+数据流(与「AI 老板驾驶舱」同源,消除数据割裂):
+  intl_roster.localized_roster(国别本地化花名册) ──► formula_engine.evaluate(公式, 员工变量) ──►
+  应享天数 / 加班费 ──► 国别法定引擎(MY=compute_monthly · 其他=statutory_intl) ──► 工资单
+  使「驾驶舱看到的 / 发薪算出的 / 工资单展示的」= 同一个数据世界。
 """
 from __future__ import annotations
 
 from app.core import formula_engine
+from app.core import statutory_intl as SI
 from app.data import payroll_data, db
+from app.data import intl_roster as R
+from app.data import enterprise as E
+
+
+# ── 公司 → 国别 反查(与驾驶舱 analytics._company_meta 同源逻辑)──
+def _country_of(company: str) -> str:
+    """由公司 id 反查所在国(MY/SG/CN/TH/HK/VN/ID);找不到回退 MY。"""
+    for g in E.GROUPS:
+        for c in g["companies"]:
+            if c["id"] == company:
+                return c.get("country", "MY")
+    return "MY"
+
+
+def _statutory_payslip(emp: dict, country: str) -> dict:
+    """非 MY 国家:本地化花名册 + 国别法定引擎 → 工资单(字段对齐 compute_monthly)。
+    与驾驶舱 analytics._compute_employee_intl 完全同口径,确保「发薪算的」=「驾驶舱看的」。
+    """
+    basic_full = float(emp.get("basic", 0) or 0)
+    pr = payroll_data.prorate_basic(basic_full, emp.get("worked_days"), emp.get("month_days"))
+    basic = pr["basic"]
+    ot_calc = payroll_data.compute_ot(basic_full, emp.get("ot_hours"))
+    ot = ot_calc["amount"]
+    gross = round(basic + ot, 2)
+
+    st = SI.compute_statutory(country, gross)
+    # 各国雇主缴纳归并到通用桶(共享 SI.employer_buckets,与驾驶舱 analytics 同一套逻辑)
+    bk = SI.employer_buckets(st["er"])
+    epf_er, socso_er, eis_er, hrdf = bk["epf_er"], bk["socso_er"], bk["eis_er"], bk["hrdf"]
+    ee_total = st["ee_total"]
+    return {
+        **emp,
+        "basic_pay": basic,
+        "prorate": pr,
+        "ot_amount": ot,
+        "ot_detail": ot_calc,
+        "gross_taxable": gross,
+        "gross_total": gross,
+        "epf_emp": 0.0, "epf_er": round(epf_er, 2),
+        "socso_emp": 0.0, "socso_er": round(socso_er, 2),
+        "eis_emp": 0.0, "eis_er": round(eis_er, 2),
+        "hrdf": round(hrdf, 2),
+        "pcb": st["income_tax"], "zakat": 0.0,
+        "total_deduction": ee_total,
+        "net_pay": st["net_pay"],
+        "employer_contrib": st["employer_contrib"],
+        "total_cost": st["total_cost"],
+        "currency": st["currency"],
+        "statutory_ee": st["ee"], "statutory_er": st["er"],
+        "scheme_zh": SI.SCHEME_NAME.get(country, {}).get("zh", ""),
+    }
 
 
 # ── 员工 dict → 公式变量空间 ──
@@ -102,8 +155,14 @@ def compute_employee_pay(emp: dict, company: str,
             "used_vars": {k: variables.get(k) for k in (r.get("used_vars") or [])},
         })
 
-    # ③ 法定扣除 + 净薪(沿用成熟引擎)
-    pay = payroll_data.compute_monthly(emp_calc)
+    # ③ 法定扣除 + 净薪(按国别分流,与驾驶舱同源)
+    #    · MY → compute_monthly(保留 LHDN MTD 精确 PCB / Zakat / EA Form 链路)
+    #    · 其他国 → statutory_intl(CPF/五险一金/SSF/MPF/PIT…)
+    country = (emp.get("country") or _country_of(company)).upper()
+    if country == "MY":
+        pay = payroll_data.compute_monthly(emp_calc)
+    else:
+        pay = _statutory_payslip(emp_calc, country)
 
     # ④ 公式驱动结果挂回工资单
     pay["entitlement_days"] = entitlement_days
@@ -116,7 +175,14 @@ def run_batch(company: str = "my", period: str = "",
               employees: list | None = None) -> dict:
     """批量发薪:遍历公司员工 → 逐人公式驱动 → 汇总。
     返回 {period, company, formulas, count, payslips, totals}。"""
-    emps = employees if employees is not None else payroll_data.PAYROLL_EMPLOYEES
+    if employees is not None:
+        emps = employees
+    else:
+        # 与驾驶舱同源:本地化花名册(按公司所在国生成本币真实薪资样本)。
+        # MY 仍可拿到 5 个 MY 员工(本地化档案首条即 MY),其余国家拿本国本地化样本,
+        # 从根上消除「驾驶舱多国 / 发薪纯 MY」的数据割裂。
+        country = _country_of(company)
+        emps = R.localized_roster(country)
     leave_formula = _get_company_formula("leave_entitlement", company)
     ot_formula = _get_company_formula("overtime", company)
 
