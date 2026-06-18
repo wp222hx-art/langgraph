@@ -786,7 +786,9 @@ async function renderCockpit() {
   drawCockpitCharts(ov);
 }
 
-function fmtRM(v) { return 'RM' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 }); }
+// 驾驶舱货币前缀:跟随后端返回的公司币种(RM/¥/HK$/S$/฿/₫/Rp),不再统一 RM
+function ckPrefix(ov) { return (ov && ov.currency_prefix) || 'RM'; }
+function fmtCur(v, prefix) { return (prefix || 'RM') + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 }); }
 function momBadge(mom) {
   if (!mom) return `<span class="ck-mom flat">0%</span>`;
   const up = mom > 0;
@@ -797,23 +799,25 @@ function drawCockpitKpis(ov) {
   const icons = { total_cost: 'fa-sack-dollar', gross: 'fa-money-bill-wave', net: 'fa-hand-holding-dollar', employer_contrib: 'fa-building', hrdf: 'fa-graduation-cap', pcb: 'fa-landmark', ot: 'fa-clock', headcount: 'fa-users' };
   const hero = ['total_cost'];
   const lang = S.lang;
+  const pfx = ckPrefix(ov);
   $('#ck-kpis').innerHTML = order.map(k => {
     const kp = ov.kpis[k]; if (!kp) return '';
-    const val = k === 'headcount' ? kp.value : fmtRM(kp.value);
+    const val = k === 'headcount' ? kp.value : fmtCur(kp.value, pfx);
     const lbl = lang === 'en' ? kp.label_en : kp.label_zh;
     return `<div class="ck-kpi ${hero.includes(k) ? 'hero' : ''}">
       <div class="ck-kpi-top"><i class="fas ${icons[k]}"></i>${k === 'headcount' ? '' : momBadge(kp.mom)}</div>
       <div class="ck-kpi-val">${val}</div><div class="ck-kpi-lbl">${lbl}</div></div>`;
   }).join('') + `<div class="ck-kpi soft"><div class="ck-kpi-top"><i class="fas fa-user-tag"></i></div>
-      <div class="ck-kpi-val">${fmtRM(ov.cost_per_head)}</div><div class="ck-kpi-lbl">${t('cockpit.per_head')}</div></div>`;
+      <div class="ck-kpi-val">${fmtCur(ov.cost_per_head, pfx)}</div><div class="ck-kpi-lbl">${t('cockpit.per_head')}</div></div>`;
 }
 function drawCockpitAI(ex) {
   $('#ck-ai-text').textContent = ex.summary || '';
+  const pfx = (ex && ex.currency_prefix) || 'RM';
   const top = (ex.factors || []).slice(0, 4);
   $('#ck-ai-factors').innerHTML = top.map(f => {
     const lbl = S.lang === 'en' ? f.label_en : f.label_zh;
     const up = f.delta > 0;
-    return `<span class="ck-factor ${up ? 'up' : 'down'}">${lbl} ${up ? '+' : ''}${fmtRM(f.delta)} <em>${f.share}%</em></span>`;
+    return `<span class="ck-factor ${up ? 'up' : 'down'}">${lbl} ${up ? '+' : ''}${fmtCur(f.delta, pfx)} <em>${f.share}%</em></span>`;
   }).join('');
 }
 function drawCockpitHealth(score) {
@@ -841,6 +845,7 @@ function drawCockpitCharts(ov) {
   _cockpitCharts.forEach(ch => { try { ch.destroy(); } catch (e) {} });
   _cockpitCharts = [];
   const lang = S.lang;
+  const pfx = ckPrefix(ov);
   // 趋势: 总成本(柱) + 加班(线)
   const tr = ov.trend;
   _cockpitCharts.push(new Chart($('#ck-trend'), {
@@ -853,7 +858,7 @@ function drawCockpitCharts(ov) {
     },
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
       plugins: { legend: { labels: { font: { size: 11 } } } },
-      scales: { y: { beginAtZero: true, ticks: { callback: v => 'RM' + (v / 1000) + 'k' } }, y1: { position: 'right', grid: { drawOnChartArea: false }, beginAtZero: true } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => pfx + (v / 1000) + 'k' } }, y1: { position: 'right', grid: { drawOnChartArea: false }, beginAtZero: true } } },
   }));
   // 部门分布(环图)
   const dp = ov.departments;
@@ -863,7 +868,7 @@ function drawCockpitCharts(ov) {
     data: { labels: dp.map(d => d.dept), datasets: [{ data: dp.map(d => d.total_cost), backgroundColor: palette, borderWidth: 2, borderColor: '#fff' }] },
     options: { responsive: true, maintainAspectRatio: false, cutout: '58%',
       plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12 } },
-        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtRM(ctx.raw)}` } } } },
+        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtCur(ctx.raw, pfx)}` } } } },
   }));
 }
 window.renderCockpit = renderCockpit;
