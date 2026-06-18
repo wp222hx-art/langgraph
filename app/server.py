@@ -657,12 +657,12 @@ def payroll_run(company: str = "my", role: str = "payroll"):
 
 # ═══════ AI 老板驾驶舱 + AI 异常稽查 (共享 analytics 引擎) ═══════
 @app.get("/api/cockpit/overview")
-def cockpit_overview(company: str = "my", month: str = "2026-05", role: str = "finance"):
-    """驾驶舱聚合: 企业总成本/HRDF/PCB/加班/部门分布 + 6月趋势 —— 需 cockpit.view。"""
+def cockpit_overview(company: str = "my", month: str = "2026-05", lang: str = "zh", role: str = "finance"):
+    """驾驶舱聚合: 企业总成本/雇主缴纳/个税/加班/部门分布 + 6月趋势 + 国别法定体系 —— 需 cockpit.view。"""
     if not permissions.can(role, "cockpit.view"):
         return permissions.deny_payload(role, "cockpit.view")
     from app.core import analytics
-    return analytics.build_overview(company, month)
+    return analytics.build_overview(company, month, lang)
 
 
 @app.get("/api/cockpit/anomalies")

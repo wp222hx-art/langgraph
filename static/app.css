@@ -560,6 +560,11 @@ body.mode-mobile .chart-box{ height:220px; }
 
 /* ════════ AI 老板驾驶舱 Cockpit ════════ */
 .cockpit-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; }
+/* 法定体系徽章: 全球合规护城河可视化(CPF/五险一金/MPF/SSF…) */
+.ck-scheme-badge { display:inline-flex; align-items:center; gap:.35rem; margin-left:.6rem;
+  padding:.2rem .6rem; border-radius:999px; font-size:.72rem; font-weight:700;
+  color:#0f766e; background:rgba(20,201,151,.12); border:1px solid rgba(20,201,151,.3); }
+.ck-scheme-badge i { font-size:.7rem; }
 .cockpit-health { text-align:center; }
 .ck-health-ring { width:62px; height:62px; border-radius:50%; display:grid; place-items:center;
   background:conic-gradient(#e2e8f0 0deg,#e2e8f0 360deg); position:relative; }

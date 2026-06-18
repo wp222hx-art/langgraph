@@ -19,25 +19,17 @@ from datetime import datetime
 
 from app.data import payroll_data as P
 from app.data import enterprise as E
+from app.data import intl_roster as R
+from app.core import statutory_intl as SI
 
 
-# ── 公司 → 币种 / 规模 / 汇率映射(保证驾驶舱与公司体系逻辑一致)──
-# 基准引擎产出为 MYR(payroll_data 全员为 MY 法定算法),
-# 各公司按"真实员工规模"缩放总量、按"对 MYR 汇率"换算到本币,
-# 使得「币种代名词」与「数值量级」严格保持逻辑关系(而非统一 RM)。
-_BASE_HEADCOUNT = 5          # payroll_data 演示样本人数(MY 引擎基准)
-_BASE_COMPANY_EMP = 256      # my 公司真实编制(缩放基准)
+# ── 公司 → 币种 / 规模 / 国别 映射(驾驶舱与公司体系逻辑一致)──
+# 驾驶舱不再用「MY 引擎 + 汇率缩放」,而是:
+#   本地化花名册(各国本币真实薪资) → 各国法定引擎(CPF/五险一金/SSF/MPF…) → 按真实编制规模放大。
+# 使得「币种 × 数值 × 法定结构」三者全部自洽(真·全球合规护城河)。
+_BASE_HEADCOUNT = 5          # 本地化花名册样本人数(放大基准)
+_BASE_COMPANY_EMP = 256      # my 公司真实编制(回退用)
 
-# 1 MYR ≈ ? 本币(用于把 MY 引擎金额换算到各公司本币,量级符合当地货币习惯)
-_FX_TO_LOCAL = {
-    "MYR": 1.0,
-    "SGD": 0.31,     # 1 MYR ≈ 0.31 SGD
-    "HKD": 1.74,     # 1 MYR ≈ 1.74 HKD
-    "CNY": 1.55,     # 1 MYR ≈ 1.55 CNY(人民币)
-    "THB": 7.6,      # 1 MYR ≈ 7.6 THB
-    "VND": 5600.0,   # 1 MYR ≈ 5600 VND
-    "IDR": 3550.0,   # 1 MYR ≈ 3550 IDR
-}
 # 货币显示符号(前缀代名词)
 _CURRENCY_PREFIX = {
     "MYR": "RM", "SGD": "S$", "HKD": "HK$", "CNY": "¥",
@@ -46,7 +38,7 @@ _CURRENCY_PREFIX = {
 
 
 def _company_meta(company: str) -> dict:
-    """由公司 id 反查 {currency, employees, fx, prefix, name}。
+    """由公司 id 反查 {currency, employees, prefix, name, country}。
     找不到则回退到 my(MYR)基准,保证永不崩。"""
     for g in E.GROUPS:
         for c in g["companies"]:
@@ -56,20 +48,25 @@ def _company_meta(company: str) -> dict:
                     "company": company,
                     "currency": cur,
                     "employees": c.get("employees", _BASE_COMPANY_EMP),
-                    "fx": _FX_TO_LOCAL.get(cur, 1.0),
                     "prefix": _CURRENCY_PREFIX.get(cur, cur + " "),
                     "name": c.get("name", company),
                     "country": c.get("country", "MY"),
                 }
     # 回退(含 group 汇总视图)
     return {"company": company, "currency": "MYR", "employees": _BASE_COMPANY_EMP,
-            "fx": 1.0, "prefix": "RM", "name": company, "country": "MY"}
+            "prefix": "RM", "name": company, "country": "MY"}
 
 
 def _currency_of(company: str) -> dict:
     """返回 {code, prefix} 供出口标注币种。"""
     m = _company_meta(company)
     return {"code": m["currency"], "prefix": m["prefix"]}
+
+
+def _scheme_of(company: str, lang: str = "zh") -> str:
+    """返回该公司所在国的法定体系简称(供前端/AI解读展示)。"""
+    country = _company_meta(company)["country"]
+    return SI.SCHEME_NAME.get(country, {}).get(lang, "")
 
 
 # ── 阈值常量(异常稽查规则)──
@@ -96,52 +93,81 @@ def _month_label(offset: int, base: str = "2026-05") -> str:
     return f"{y}-{m:02d}"
 
 
-# 需随"公司规模 + 汇率"缩放的金额型字段(headcount/比例/工时类不缩放)
-_MONEY_KEYS = (
-    "gross_total", "net_pay", "basic_pay", "ot_amount",
-    "epf_er", "socso_er", "eis_er", "hrdf", "pcb",
-    "employer_contrib", "total_cost",
-)
+def _compute_employee_intl(emp: dict, country: str) -> dict:
+    """单员工本地化薪资明细(本币): 基本工资(可按比例) + 加班(分级) → 各国法定引擎。
+    输出字段兼容 _aggregate / _dept_breakdown 既有 key(gross_total/net_pay/epf_er…),
+    并保留本地化展示字段(name/designation_zh/dept_zh/scheme/ee/er)。"""
+    basic_full = float(emp["basic"])
+    # 入/离职月按比例
+    pr = P.prorate_basic(basic_full, emp.get("worked_days"), emp.get("month_days"))
+    basic = pr["basic"]
+    # 加班(分级 1.5/2.0/3.0),时薪基于本币基本工资
+    ot_calc = P.compute_ot(basic_full, emp.get("ot_hours"))
+    ot = ot_calc["amount"]
+    gross = round(basic + ot, 2)
+
+    st = SI.compute_statutory(country, gross)
+    er = st["er"]
+    # 把各国雇主缴纳归并到通用桶(供既有 KPI/归因复用):
+    #   养老金/公积金类 → epf_er;医疗/社保类 → socso_er;失业/技能税 → eis_er;其余 → hrdf
+    epf_er = socso_er = eis_er = hrdf = 0.0
+    for k, v in er.items():
+        kl = k.lower()
+        if any(t in k for t in ("养老", "JHT", "JP", "公积金")) or kl in ("cpf", "epf", "mpf"):
+            epf_er += v
+        elif any(t in k for t in ("医疗", "医保", "社保")) or kl in ("socso", "ssf", "si", "hi"):
+            socso_er += v
+        elif any(t in k for t in ("失业",)) or kl in ("eis", "sdl", "ui"):
+            eis_er += v
+        else:
+            hrdf += v  # 工伤/生育/死亡/HRDF 等其他雇主负担
+
+    return {
+        **emp,
+        "basic_pay": basic,
+        "prorate": pr,
+        "ot_amount": ot,
+        "ot_detail": ot_calc,
+        "gross_total": gross,
+        "net_pay": st["net_pay"],
+        "epf_er": round(epf_er, 2), "socso_er": round(socso_er, 2),
+        "eis_er": round(eis_er, 2), "hrdf": round(hrdf, 2),
+        "pcb": st["income_tax"],                # 通用桶: 个税(各国 PCB/IIT/PIT/PPh21/薪俸税)
+        "employer_contrib": st["employer_contrib"],
+        "total_cost": st["total_cost"],
+        "currency": st["currency"],
+        "statutory_ee": st["ee"], "statutory_er": st["er"],
+        "scheme_zh": SI.SCHEME_NAME.get(country, {}).get("zh", ""),
+    }
 
 
 def _company_snapshot(company: str = "my") -> list[dict]:
-    """当月全员薪资快照(消费 Wave2 引擎)。
-    按公司真实编制 + 本币汇率缩放,使每家公司产出"不同且与其规模/币种逻辑一致"的数据。
+    """当月全员薪资快照(本地化花名册 + 国别法定引擎)。
+    样本 5 人,金额为该国本币真实量级;聚合时再按真实编制规模放大(见 _aggregate)。
     """
     meta = _company_meta(company)
-    # 规模放大:把 5 人样本放大到该公司真实编制量级
-    head_scale = meta["employees"] / _BASE_HEADCOUNT
-    fx = meta["fx"]
-    # 公司特异确定性扰动(避免不同公司只是等比例放大,呈现各自结构差异)
-    co_wobble = 0.90 + _seed(company + "co") * 0.20  # 0.90~1.10
-
-    snap = []
-    for e in P.PAYROLL_EMPLOYEES:
-        row = P.compute_monthly(e)
-        # 该员工的公司特异微扰(部门/个体差异)
-        emp_w = 0.92 + _seed(company + str(row.get("emp_no", row.get("name", "")))) * 0.16
-        factor = head_scale * fx * co_wobble * emp_w
-        new = dict(row)
-        for k in _MONEY_KEYS:
-            if k in new and isinstance(new[k], (int, float)):
-                new[k] = round(new[k] * factor, 2)
-        # ot_detail 工时不缩放(工时是真实小时数,跨币种无意义),但加班金额已随 ot_amount 缩放
-        snap.append(new)
-    return snap
+    country = meta["country"]
+    roster = R.localized_roster(country)
+    return [_compute_employee_intl(e, country) for e in roster]
 
 
 def _aggregate(snap: list[dict], company: str = "my") -> dict:
-    """把全员快照聚合成公司级指标。
-    headcount 用公司真实编制(snap 是样本结构、金额已放大到该编制量级)。
+    """把样本快照聚合成公司级指标。
+    样本 5 人为本币真实量级,按"真实编制/样本数"放大到全公司规模,
+    并叠加公司确定性扰动(让各公司不是整齐 5 倍数,呈现真实结构差异)。
     """
-    def s(k):
-        return round(sum(x.get(k, 0) or 0 for x in snap), 2)
     headcount = _company_meta(company)["employees"]
+    sample_n = len(snap) or 1
+    scale = headcount / sample_n
+    co_wobble = 0.95 + _seed(company + "agg") * 0.10  # 0.95~1.05 公司级扰动
+
+    def s(k):
+        return round(sum(x.get(k, 0) or 0 for x in snap) * scale * co_wobble, 2)
     return {
         "headcount": headcount,
         "gross": s("gross_total"),
         "net": s("net_pay"),
-        "basic": round(sum(x["basic_pay"] for x in snap), 2),
+        "basic": round(sum(x["basic_pay"] for x in snap) * scale * co_wobble, 2),
         "ot": s("ot_amount"),
         "epf_er": s("epf_er"), "socso_er": s("socso_er"), "eis_er": s("eis_er"),
         "hrdf": s("hrdf"),
@@ -173,16 +199,18 @@ def _derive_history(current: dict, months: int = 6, base: str = "2026-05") -> li
     return series
 
 
-def _dept_breakdown(snap: list[dict], company: str = "my") -> list[dict]:
+def _dept_breakdown(snap: list[dict], company: str = "my", lang: str = "zh") -> list[dict]:
     """按部门聚合企业总成本(驾驶舱部门分布环图)。
-    部门人头按公司真实编制等比放大(样本人数→真实编制)。
+    人头与金额均按公司真实编制等比放大(样本→真实编制)。
+    部门名按语言本地化(中文部门名 / 英文 dept)。
     """
     sample_n = len(snap) or 1
     real_head = _company_meta(company)["employees"]
-    head_mul = real_head / sample_n  # 样本人头→真实编制
+    mul = real_head / sample_n  # 样本→真实编制(人头与金额同步放大)
     buckets: dict[str, dict] = {}
     for x in snap:
-        d = x.get("dept", "其他") or "其他"
+        d = x.get("dept_zh", "其他") if lang != "en" else x.get("dept", "Other")
+        d = d or ("其他" if lang != "en" else "Other")
         b = buckets.setdefault(d, {"dept": d, "_sample": 0, "total_cost": 0.0,
                                    "gross": 0.0, "ot": 0.0})
         b["_sample"] += 1
@@ -190,16 +218,16 @@ def _dept_breakdown(snap: list[dict], company: str = "my") -> list[dict]:
         b["gross"] += x["gross_total"]
         b["ot"] += x["ot_amount"]
     out = [{"dept": b["dept"],
-            "headcount": max(1, round(b["_sample"] * head_mul)),
-            "total_cost": round(b["total_cost"], 2),
-            "gross": round(b["gross"], 2), "ot": round(b["ot"], 2)}
+            "headcount": max(1, round(b["_sample"] * mul)),
+            "total_cost": round(b["total_cost"] * mul, 2),
+            "gross": round(b["gross"] * mul, 2), "ot": round(b["ot"] * mul, 2)}
            for b in buckets.values()]
     out.sort(key=lambda r: r["total_cost"], reverse=True)
     return out
 
 
 # ════════════════ ① 驾驶舱聚合 ════════════════
-def build_overview(company: str = "my", base_month: str = "2026-05") -> dict:
+def build_overview(company: str = "my", base_month: str = "2026-05", lang: str = "zh") -> dict:
     snap = _company_snapshot(company)
     cur = _aggregate(snap, company)
     cur_meta = _currency_of(company)
@@ -218,8 +246,8 @@ def build_overview(company: str = "my", base_month: str = "2026-05") -> dict:
         "gross":      {"value": cur["gross"], "mom": mom("gross"), "label_zh": "薪资总额", "label_en": "Gross Payroll"},
         "net":        {"value": cur["net"], "mom": mom("net"), "label_zh": "实发合计", "label_en": "Net Pay"},
         "employer_contrib": {"value": cur["employer_contrib"], "mom": mom("employer_contrib"), "label_zh": "雇主缴纳", "label_en": "Employer Contrib"},
-        "hrdf":       {"value": cur["hrdf"], "mom": mom("hrdf"), "label_zh": "HRDF 征费", "label_en": "HRDF Levy"},
-        "pcb":        {"value": cur["pcb"], "mom": mom("pcb"), "label_zh": "PCB 预扣税", "label_en": "PCB/MTD"},
+        "hrdf":       {"value": cur["hrdf"], "mom": mom("hrdf"), "label_zh": "其他雇主负担", "label_en": "Other Levies"},
+        "pcb":        {"value": cur["pcb"], "mom": mom("pcb"), "label_zh": "个税预扣", "label_en": "Income Tax"},
         "ot":         {"value": cur["ot"], "mom": mom("ot"), "label_zh": "加班成本", "label_en": "Overtime"},
         "headcount":  {"value": cur["headcount"], "mom": 0.0, "label_zh": "在职人数", "label_en": "Headcount"},
     }
@@ -229,6 +257,8 @@ def build_overview(company: str = "my", base_month: str = "2026-05") -> dict:
     return {
         "ok": True, "company": company, "month": base_month,
         "currency": cur_meta["code"], "currency_prefix": cur_meta["prefix"],
+        "country": _company_meta(company)["country"],
+        "scheme": _scheme_of(company, lang),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "kpis": kpis,
         "cost_per_head": cost_per_head,
@@ -236,13 +266,17 @@ def build_overview(company: str = "my", base_month: str = "2026-05") -> dict:
         "trend": [{"month": h["month"], "total_cost": h["total_cost"],
                    "gross": h["gross"], "ot": h["ot"], "hrdf": h.get("hrdf", 0),
                    "pcb": h.get("pcb", 0)} for h in hist],
-        "departments": _dept_breakdown(snap, company),
+        "departments": _dept_breakdown(snap, company, lang),
         "current": cur, "previous": prev,
     }
 
 
 # ════════════════ ④ 异常稽查 ════════════════
 def _sev_rank(s): return {"critical": 3, "warning": 2, "info": 1}.get(s, 0)
+
+
+# 各国月度加班法定上限(h/月,用于稽查文案本地化)
+_OT_LEGAL_CAP = {"MY": 104, "SG": 72, "CN": 36, "TH": 36, "HK": 0, "VN": 40, "ID": 56}
 
 
 def detect_anomalies(company: str = "my", base_month: str = "2026-05") -> dict:
@@ -252,6 +286,9 @@ def detect_anomalies(company: str = "my", base_month: str = "2026-05") -> dict:
     cur = hist[-1]
     cur_meta = _currency_of(company)
     pfx = cur_meta["prefix"]
+    country = _company_meta(company)["country"]
+    legal_cap = _OT_LEGAL_CAP.get(country, 104)
+    cap_txt = f"{country} 法定上限 {legal_cap}h/月" if legal_cap else f"{country} 无硬性月上限,但需关注疲劳风险"
     issues = []
 
     def add(sev, code, who, title_zh, detail_zh, metric=None):
@@ -265,7 +302,7 @@ def detect_anomalies(company: str = "my", base_month: str = "2026-05") -> dict:
         ot_hours = sum(b["hours"] for b in x["ot_detail"]["breakdown"])
         if ot_hours > OT_HOURS_CRIT:
             add("critical", "OT_HOURS", name, "加班时数严重超标",
-                f"{name} 本月加班 {ot_hours:.0f} 小时,超过 {OT_HOURS_CRIT}h 严重阈值(MY 法定上限 104h/月),需复核考勤真实性。", ot_hours)
+                f"{name} 本月加班 {ot_hours:.0f} 小时,超过 {OT_HOURS_CRIT}h 严重阈值({cap_txt}),需复核考勤真实性。", ot_hours)
         elif ot_hours > OT_HOURS_WARN:
             add("warning", "OT_HOURS", name, "加班时数偏高",
                 f"{name} 本月加班 {ot_hours:.0f} 小时,超过 {OT_HOURS_WARN}h 预警线,建议核对工时与人力配置。", ot_hours)
@@ -279,7 +316,7 @@ def detect_anomalies(company: str = "my", base_month: str = "2026-05") -> dict:
         if x["prorate"]["prorated"]:
             pr = x["prorate"]
             add("info", "PRORATE", name, "按比例工资(入/离职月)",
-                f"{name} 本月在职 {pr['worked_days']}/{pr['month_days']} 天,基本工资按比例折算 {pfx}{x['basic_pay']:,.0f},属正常但需财务确认离职结算/CP21。")
+                f"{name} 本月在职 {pr['worked_days']}/{pr['month_days']} 天,基本工资按比例折算 {pfx}{x['basic_pay']:,.0f},属正常但需财务确认离职结算与当地税务清算。")
 
     # —— 公司级规则 ——
     def chg(k):
@@ -303,27 +340,28 @@ def detect_anomalies(company: str = "my", base_month: str = "2026-05") -> dict:
     health = max(0, 100 - counts["critical"] * 20 - counts["warning"] * 8 - counts["info"] * 2)
     return {"ok": True, "company": company, "month": base_month,
             "currency": cur_meta["code"], "currency_prefix": pfx,
+            "country": country, "scheme": SI.SCHEME_NAME.get(country, {}).get("zh", ""),
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "health_score": health, "counts": counts, "anomalies": issues}
 
 
 # ════════════════ ③ AI 解读层(为何涨了)════════════════
 def explain_cost_change(company: str = "my", base_month: str = "2026-05", lang: str = "zh") -> dict:
-    ov = build_overview(company, base_month)
+    ov = build_overview(company, base_month, lang)
     cur, prev = ov["current"], ov["previous"]
     pfx = ov.get("currency_prefix", "RM")
     delta_total = round(cur["total_cost"] - prev["total_cost"], 2)
 
-    # 归因分解: 各成本要素的环比贡献
+    # 归因分解: 各成本要素的环比贡献(术语国别中性,通用桶映射各国法定项)
     factors = []
     for k, zh, en in [
         ("basic", "基本工资", "Basic salary"),
         ("ot", "加班费", "Overtime"),
-        ("epf_er", "雇主 EPF", "Employer EPF"),
-        ("socso_er", "雇主 SOCSO", "Employer SOCSO"),
-        ("eis_er", "雇主 EIS", "Employer EIS"),
-        ("hrdf", "HRDF 征费", "HRDF levy"),
-        ("pcb", "PCB 预扣税", "PCB/MTD"),
+        ("epf_er", "雇主养老金/公积金", "Employer Pension/Provident Fund"),
+        ("socso_er", "雇主社保/医保", "Employer Social/Medical Insurance"),
+        ("eis_er", "雇主失业/技能税", "Employer Unemployment/Skills Levy"),
+        ("hrdf", "其他雇主负担", "Other Employer Levies"),
+        ("pcb", "个人所得税预扣", "Income Tax Withholding"),
     ]:
         d = round((cur.get(k, 0) or 0) - (prev.get(k, 0) or 0), 2)
         if abs(d) < 0.01:

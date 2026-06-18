@@ -774,11 +774,19 @@ async function renderCockpit() {
 
   const c = S.company.id, m = '2026-05';
   const [ov, an, ex] = await Promise.all([
-    api(`/api/cockpit/overview?company=${c}&month=${m}&role=${roleId}`),
+    api(`/api/cockpit/overview?company=${c}&month=${m}&lang=${lang}&role=${roleId}`),
     api(`/api/cockpit/anomalies?company=${c}&month=${m}&role=${roleId}`),
     api(`/api/cockpit/explain?company=${c}&month=${m}&lang=${lang}&role=${roleId}`),
   ]);
   if (ov.denied || !ov.ok) { $('#ck-ai-text').textContent = (ov.message || t('cockpit.denied')); return; }
+  // 法定体系徽章: 让"全球合规护城河"可见(CPF / 五险一金 / MPF / SSF…)
+  if (ov.scheme) {
+    const badge = document.createElement('span');
+    badge.className = 'ck-scheme-badge';
+    badge.innerHTML = `<i class="fas fa-shield-halved"></i> ${ov.currency} · ${ov.scheme}`;
+    const sub = view.querySelector('.cockpit-head p');
+    if (sub) sub.appendChild(badge);
+  }
   drawCockpitKpis(ov);
   drawCockpitAI(ex);
   drawCockpitHealth(an.health_score);
