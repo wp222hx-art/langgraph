@@ -21,6 +21,13 @@ from app.data import intl_roster as R
 from app.data import enterprise as E
 
 
+# 货币显示符号(与驾驶舱 analytics._CURRENCY_PREFIX 保持一致)
+_CURRENCY_PREFIX = {
+    "MYR": "RM", "SGD": "S$", "HKD": "HK$", "CNY": "¥",
+    "THB": "฿", "VND": "₫", "IDR": "Rp",
+}
+
+
 # ── 公司 → 国别 反查(与驾驶舱 analytics._company_meta 同源逻辑)──
 def _country_of(company: str) -> str:
     """由公司 id 反查所在国(MY/SG/CN/TH/HK/VN/ID);找不到回退 MY。"""
@@ -29,6 +36,16 @@ def _country_of(company: str) -> str:
             if c["id"] == company:
                 return c.get("country", "MY")
     return "MY"
+
+
+def _currency_of(company: str) -> dict:
+    """由公司 id 反查 {code, prefix}(币种代码 + 显示符号);找不到回退 MYR/RM。"""
+    for g in E.GROUPS:
+        for c in g["companies"]:
+            if c["id"] == company:
+                code = c.get("currency", "MYR")
+                return {"code": code, "prefix": _CURRENCY_PREFIX.get(code, code + " ")}
+    return {"code": "MYR", "prefix": "RM"}
 
 
 def _statutory_payslip(emp: dict, country: str) -> dict:
@@ -202,10 +219,13 @@ def run_batch(company: str = "my", period: str = "",
                 pass
     tot = {k: round(v, 2) for k, v in tot.items()}
 
+    cur = _currency_of(company)
     return {
         "ok": True,
         "company": company,
         "period": period,
+        "currency": cur["code"],
+        "currency_prefix": cur["prefix"],
         "count": len(payslips),
         "formulas": {
             "leave_entitlement": leave_formula or "(未配置·用默认天数)",
@@ -235,5 +255,6 @@ def batch_summary(company: str = "my", period: str = "") -> dict:
             "formula_trace": ps.get("formula_trace"),
         })
     return {"ok": True, "company": company, "period": period,
+            "currency": full["currency"], "currency_prefix": full["currency_prefix"],
             "formulas": full["formulas"], "count": full["count"],
             "rows": rows, "totals": full["totals"]}

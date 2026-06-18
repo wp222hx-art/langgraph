@@ -488,6 +488,7 @@ async function runFormulaPayroll(btn) {
     const r = await api(`/api/payroll/run?company=${company}&role=${S.role ? S.role.id : 'payroll'}`, null, 'GET');
     if (r.error || r.denied) { box.innerHTML = `<div class="fp-err"><i class="fas fa-lock"></i> ${esc(r.error || (en ? 'No permission' : '权限不足'))}</div>`; return; }
     const tot = r.totals || {};
+    const cpf = r.currency_prefix || 'RM';   // 币种前缀(随公司所在国)
     const fxNote = `<div class="fp-fxbar">
       <span class="fp-fxchip ${r.formulas.leave_active ? 'on' : 'off'}"><i class="fas fa-umbrella-beach"></i> ${en ? 'Leave formula' : '假期公式'}: ${r.formulas.leave_active ? (en ? 'ACTIVE' : '已驱动') : (en ? 'default' : '默认')}</span>
       <span class="fp-fxchip ${r.formulas.ot_active ? 'on' : 'off'}"><i class="fas fa-business-time"></i> ${en ? 'OT formula' : '加班公式'}: ${r.formulas.ot_active ? (en ? 'ACTIVE' : '已驱动') : (en ? 'default' : '默认')}</span>
@@ -498,12 +499,12 @@ async function runFormulaPayroll(btn) {
         ? `<button class="fp-trace-btn" onclick='fpShowTrace(${JSON.stringify(JSON.stringify(p.formula_trace))})' title="${en ? 'Formula trace' : '公式溯源'}"><i class="fas fa-diagram-project"></i> ${traceOk}</button>` : '—';
       return `<tr>
         <td>${esc(p.emp_no)}</td><td>${esc(p.name)}</td><td>${esc(p.grade || '')}</td>
-        <td class="num">${fmtMoney(p.basic_pay)}</td>
-        <td class="num">${fmtMoney(p.ot_amount)}</td>
+        <td class="num">${fmtMoney(p.basic_pay, cpf)}</td>
+        <td class="num">${fmtMoney(p.ot_amount, cpf)}</td>
         <td class="num"><b>${p.entitlement_days}</b></td>
-        <td class="num">${fmtMoney(p.gross_total)}</td>
-        <td class="num fp-ded">-${fmtMoney(p.total_deduction)}</td>
-        <td class="num fp-net">${fmtMoney(p.net_pay)}</td>
+        <td class="num">${fmtMoney(p.gross_total, cpf)}</td>
+        <td class="num fp-ded">-${fmtMoney(p.total_deduction, cpf)}</td>
+        <td class="num fp-net">${fmtMoney(p.net_pay, cpf)}</td>
         <td class="center">${traceBtn}</td></tr>`;
     }).join('');
     box.innerHTML = `${fxNote}
@@ -515,9 +516,9 @@ async function runFormulaPayroll(btn) {
           <th class="num">${en ? 'Deduction' : '扣除'}</th><th class="num">${en ? 'Net Pay' : '实发'}</th>
           <th class="center">${en ? 'Trace' : '溯源'}</th>
         </tr></thead><tbody>${rows}</tbody>
-        <tfoot><tr><td colspan="6">${en ? 'TOTAL' : '合计'} · ${r.count} ${en ? 'employees' : '人'}</td>
-          <td class="num">${fmtMoney(tot.gross_total)}</td><td class="num fp-ded">-${fmtMoney(tot.total_deduction || (tot.gross_total - tot.net_pay))}</td>
-          <td class="num fp-net">${fmtMoney(tot.net_pay)}</td><td></td></tr></tfoot>
+        <tfoot><tr><td colspan="6">${en ? 'TOTAL' : '合计'} · ${r.count} ${en ? 'employees' : '人'} · <span class="fp-cur">${esc(r.currency || cpf)}</span></td>
+          <td class="num">${fmtMoney(tot.gross_total, cpf)}</td><td class="num fp-ded">-${fmtMoney(tot.total_deduction || (tot.gross_total - tot.net_pay), cpf)}</td>
+          <td class="num fp-net">${fmtMoney(tot.net_pay, cpf)}</td><td></td></tr></tfoot>
       </table></div>
       <p class="fp-hint"><i class="fas fa-circle-info"></i> ${en ? 'Leave days & OT driven by formulas saved in Leave Entitlement / Overtime modules. Click trace to see variables.' : '应享天数 / 加班费由「假期权益 / 加班设置」模块里保存的公式实时驱动。点溯源图标看变量来源。'}</p>`;
   } catch (e) {
@@ -526,10 +527,8 @@ async function runFormulaPayroll(btn) {
 }
 window.runFormulaPayroll = runFormulaPayroll;
 
-function fmtMoney(v) {
-  const n = Number(v || 0);
-  return n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+// 注:fmtMoney(v, cur) 统一定义于后文(币种前缀 + 数字),全站共用,此处不再重复定义
+//     (此前这里有一份重复定义会被后定义者覆盖 —— 同「重复路由」类隐患,已合并)
 
 // 公式溯源弹层
 function fpShowTrace(traceJson) {
